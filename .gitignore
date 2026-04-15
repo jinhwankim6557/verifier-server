@@ -1,0 +1,12 @@
+.claude/
+.DS_Store
+node_modules/
+.idea/
+.vscode/
+*.class
+build/
+.gradle/
+dist/
+out/
+target/
+*.log

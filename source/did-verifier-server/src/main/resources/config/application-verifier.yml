@@ -1,0 +1,25 @@
+# Verifier 설정
+# VerifierProperty에서 로드됩니다 (@ConfigurationProperties(prefix = "verifier"))
+
+verifier:
+  # Verifier DID (필수)
+  did: "did:omn:verifier"
+  
+  # Verifier 이름 (필수)
+  name: "OpenDID Verifier"
+  
+  # Verifier 가입증명서 VC URL (Optional)
+  certVcRef: "http://127.0.0.1:8092/verifier/cert-vc"
+  
+  # Verifier 참조 URL (Optional, 예: 홈페이지)
+  ref: "https://www.opendid.org"
+  
+  # Verifier 도메인 (Optional)
+  domain: "verifier.opendid.org"
+  
+  # TAS URL
+  tasUrl: "http://localhost:8090"
+  
+  # Verifier API Endpoint 목록
+  verifierEndPoints:
+    - "http://127.0.0.1:8092/verifier/api/v1"

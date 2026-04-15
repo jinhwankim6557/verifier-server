@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+  xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+  <include file="set.0/project-init_vp_offer.xml" relativeToChangelogFile="true" />
+  <include file="set.0/project-init_sub_transaction.xml" relativeToChangelogFile="true" />
+  <include file="set.0/project-init_transaction.xml" relativeToChangelogFile="true" />
+  <include file="set.0/project-init_e2e.xml" relativeToChangelogFile="true" />
+  <include file="set.0/project-init_vp_profile.xml" relativeToChangelogFile="true" />
+  <include file="set.0/project-init_vp_submit.xml" relativeToChangelogFile="true" />
+  <include file="set.0/project-init_certificate_vc.xml" relativeToChangelogFile="true" />
+  <include file="set.1/project-init_payload.xml" relativeToChangelogFile="true" />
+  <include file="set.1/project-init_vp_filter.xml" relativeToChangelogFile="true" />
+  <include file="set.1/project-init_vp_process.xml" relativeToChangelogFile="true" />
+  <include file="set.1/project-init_policy_profile.xml" relativeToChangelogFile="true" />
+  <include file="set.1/project-init_vp_policy.xml" relativeToChangelogFile="true" />
+  <include file="set.1/project-init_verifier.xml" relativeToChangelogFile="true" />
+  <include file="set.1/project-init_admin.xml" relativeToChangelogFile="true" />
+  <include file="set.2/admin-2phase-add_policy_profile.xml" relativeToChangelogFile="true" />
+  <include file="set.2/admin-2phase-add_payload.xml" relativeToChangelogFile="true" />
+  <include file="set.2/admin-2phase-add_vp_offer.xml" relativeToChangelogFile="true" />
+  <include file="set.2/admin-2phase-did_document.xml" relativeToChangelogFile="true" />
+  <include file="set.2/admin-2phase-issuer.xml" relativeToChangelogFile="true" />
+  <include file="set.2/admin-2phase-zkp_proof_request.xml" relativeToChangelogFile="true" />
+  <include file="set.2/admin-2phase-zkp_policy_profile.xml" relativeToChangelogFile="true" />
+  <include file="set.2/admin-2phase-remove_fk_vp_policy.xml" relativeToChangelogFile="true" />
+  <include file="set.2/admin-2phase-modify_vp_submit.xml" relativeToChangelogFile="true" />
+  <include file="set.2/admin-2phase_admin.xml" relativeToChangelogFile="true"/>
+  <include file="set.3/protocol-add_protocol_type.xml" relativeToChangelogFile="true" />
+  <include file="set.3/protocol-create_oid4vp_config.xml" relativeToChangelogFile="true" />
+  <include file="set.3/protocol-create_dcql_scope_mapping.xml" relativeToChangelogFile="true" />
+  <include file="set.3/protocol-create_oid4vp_session_mapping.xml" relativeToChangelogFile="true" />
+  <include file="set.3/protocol-seed_oid4vp_config.xml" relativeToChangelogFile="true" />
+  <include file="set.3/protocol-create_oid4vp_session.xml" relativeToChangelogFile="true" />
+
+</databaseChangeLog>

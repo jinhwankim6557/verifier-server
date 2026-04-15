@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VP Submission Flow — 간소화 플로우 시안</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0f0; padding: 40px 20px; }
+
+    h2 { font-size: 14px; color: #999; font-weight: 500; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .section { margin-bottom: 48px; }
+
+    /* ── Badge 정의 ── */
+    .protocol-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+    .protocol-badge.did-vp  { background: #e8f5e9; color: #2e7d32; }
+    .protocol-badge.oid4vp  { background: #e3f2fd; color: #1565c0; }
+    .protocol-badge.mdl     { background: #fff3e0; color: #e65100; }
+    .protocol-badge.sd-jwt  { background: #f3e5f5; color: #6a1b9a; }
+
+    /* ── 팝업 공통 ── */
+    .popup-box {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+      overflow: hidden;
+      max-width: 420px;
+    }
+    .popup-header {
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .popup-header h3 { font-size: 16px; color: #1a1a2e; }
+    .popup-header p  { font-size: 13px; color: #888; margin-top: 4px; }
+    .popup-body { padding: 12px 16px; max-height: 300px; overflow-y: auto; }
+    .popup-footer {
+      padding: 12px 16px;
+      border-top: 1px solid #f0f0f0;
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    /* ── Policy 항목 ── */
+    .policy-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .policy-item:hover { background: #f7f7f7; }
+    .policy-item input[type="radio"] { accent-color: #2F325E; width: 16px; height: 16px; flex-shrink: 0; }
+    .policy-item label {
+      font-size: 14px;
+      color: #333;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex: 1;
+    }
+    .policy-name { flex: 1; }
+
+    /* ── 버튼 ── */
+    .btn { padding: 8px 20px; border-radius: 6px; font-size: 13px; cursor: pointer; border: none; }
+    .btn-secondary { background: #f0f0f0; color: #555; }
+    .btn-primary   { background: #2F325E; color: #fff; }
+    .btn-primary:hover { background: #3d4070; }
+
+    /* ── 필터 칩 ── */
+    .filter-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .filter-chip {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      cursor: pointer;
+      border: 1px solid #ddd;
+      background: #fff;
+      color: #666;
+      transition: all 0.15s;
+    }
+    .filter-chip.active { border-color: #2F325E; background: #2F325E; color: #fff; }
+    .filter-chip.all    { border-color: #999; }
+
+    /* ── 모달 오버레이 ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-overlay .popup-box { max-width: 420px; width: 90%; }
+
+    /* ── QR 팝업 ── */
+    .qr-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 16px;
+    }
+    .qr-placeholder {
+      width: 200px;
+      height: 200px;
+      background: #f5f5f5;
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #999;
+      font-size: 13px;
+      text-align: center;
+    }
+    .qr-info {
+      margin: 12px 0 0;
+      padding: 8px 12px;
+      background: #f9f9f9;
+      border-radius: 6px;
+      font-size: 13px;
+      width: 100%;
+    }
+    .qr-info .policy-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .qr-info .policy-line span.label { color: #666; }
+    .qr-info .flow-line { color: #888; font-size: 12px; }
+    .qr-timer {
+      margin-top: 12px;
+      font-size: 13px;
+      color: #666;
+    }
+    .qr-timer .countdown { color: #d32f2f; font-weight: 600; font-size: 15px; }
+    .qr-scan-guide {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #999;
+    }
+
+    /* ── Demo 시작 영역 ── */
+    .demo-card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+      padding: 24px;
+      max-width: 420px;
+    }
+    .demo-card h3 { font-size: 16px; color: #1a1a2e; margin-bottom: 8px; }
+    .demo-card p  { font-size: 13px; color: #888; margin-bottom: 16px; line-height: 1.5; }
+
+    /* ── 플로우 다이어그램 ── */
+    .flow-diagram {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+      padding: 20px 24px;
+      max-width: 700px;
+      margin-bottom: 24px;
+    }
+    .flow-steps {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex-wrap: wrap;
+    }
+    .flow-step {
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .flow-step.active  { background: #2F325E; color: #fff; }
+    .flow-step.pending { background: #f0f0f0; color: #999; }
+    .flow-step.done    { background: #e8f5e9; color: #2e7d32; }
+    .flow-arrow { color: #ccc; font-size: 18px; margin: 0 4px; }
+
+    /* ── AS-IS 플로우 ── */
+    .asis-flow {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+      padding: 20px 24px;
+      max-width: 700px;
+    }
+    .asis-flow h4 { font-size: 13px; color: #666; margin-bottom: 12px; }
+    .asis-steps {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex-wrap: wrap;
+    }
+    .asis-step {
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      background: #f0f0f0;
+      color: #888;
+      text-decoration: line-through;
+    }
+    .asis-step.kept {
+      text-decoration: none;
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    .asis-arrow { color: #ddd; font-size: 16px; margin: 0 4px; }
+  </style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════
+     플로우 비교: AS-IS vs TO-BE
+════════════════════════════════════════ -->
+<div class="section">
+  <h2>플로우 비교</h2>
+
+  <div class="asis-flow" style="margin-bottom: 16px;">
+    <h4>AS-IS (기존 demo-server)</h4>
+    <div class="asis-steps">
+      <span class="asis-step">프로토콜 탭 선택</span>
+      <span class="asis-arrow">&rarr;</span>
+      <span class="asis-step">[Search] 클릭</span>
+      <span class="asis-arrow">&rarr;</span>
+      <span class="asis-step">API로 Policy 조회</span>
+      <span class="asis-arrow">&rarr;</span>
+      <span class="asis-step">Policy 선택 팝업</span>
+      <span class="asis-arrow">&rarr;</span>
+      <span class="asis-step">[Select]</span>
+      <span class="asis-arrow">&rarr;</span>
+      <span class="asis-step">Policy 저장 API</span>
+      <span class="asis-arrow">&rarr;</span>
+      <span class="asis-step kept">[Submit your ID]</span>
+      <span class="asis-arrow">&rarr;</span>
+      <span class="asis-step kept">QR 팝업</span>
+    </div>
+  </div>
+
+  <div class="flow-diagram">
+    <h4 style="font-size: 13px; color: #666; margin-bottom: 12px;">TO-BE (간소화)</h4>
+    <div class="flow-steps">
+      <span class="flow-step active">[Submit your ID] 클릭</span>
+      <span class="flow-arrow">&rarr;</span>
+      <span class="flow-step pending">Policy 선택 팝업</span>
+      <span class="flow-arrow">&rarr;</span>
+      <span class="flow-step pending">[선택] 클릭</span>
+      <span class="flow-arrow">&rarr;</span>
+      <span class="flow-step pending">QR 생성 + 팝업</span>
+    </div>
+    <p style="font-size: 12px; color: #999; margin-top: 10px;">
+      * 페이지 로드 시 <code>GET /demo/api/vp-policies</code> 미리 호출하여 Policy 목록 캐싱
+    </p>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     인터랙티브 데모 — TO-BE A: 전체 목록 + Badge
+════════════════════════════════════════ -->
+<div class="section">
+  <h2>TO-BE A — 전체 목록 + Badge (탭 없음)</h2>
+
+  <div class="demo-card">
+    <h3>Submit a certificate</h3>
+    <p>
+      OpenDID Demo Submit your mobile ID.<br/>
+      A QR code will be generated when you click the button.
+    </p>
+    <button class="btn btn-primary" onclick="openPolicyPopup('A')">Submit your ID</button>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     인터랙티브 데모 — TO-BE B: 필터 칩 + Badge
+════════════════════════════════════════ -->
+<div class="section">
+  <h2>TO-BE B — 필터 칩 + Badge (프로토콜 추가 대응)</h2>
+
+  <div class="demo-card">
+    <h3>Submit a certificate</h3>
+    <p>
+      OpenDID Demo Submit your mobile ID.<br/>
+      A QR code will be generated when you click the button.
+    </p>
+    <button class="btn btn-primary" onclick="openPolicyPopup('B')">Submit your ID</button>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     모달: Policy 선택 — TO-BE A
+════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-policy-A">
+  <div class="popup-box">
+    <div class="popup-header">
+      <h3>Policy 선택</h3>
+      <p>검증에 사용할 Policy를 선택하세요.</p>
+    </div>
+    <div class="popup-body">
+      <div class="policy-item" onclick="selectRadio('pA1')">
+        <input type="radio" id="pA1" name="policy-A" value="운전면허 검증|did-vp"><label for="pA1"><span class="policy-name">운전면허 검증</span><span class="protocol-badge did-vp">DID VP</span></label>
+      </div>
+      <div class="policy-item" onclick="selectRadio('pA2')">
+        <input type="radio" id="pA2" name="policy-A" value="재직증명서 검증|did-vp"><label for="pA2"><span class="policy-name">재직증명서 검증</span><span class="protocol-badge did-vp">DID VP</span></label>
+      </div>
+      <div class="policy-item" onclick="selectRadio('pA3')">
+        <input type="radio" id="pA3" name="policy-A" value="신분증 검증 (OID4VP)|oid4vp"><label for="pA3"><span class="policy-name">신분증 검증 (OID4VP)</span><span class="protocol-badge oid4vp">OID4VP</span></label>
+      </div>
+      <div class="policy-item" onclick="selectRadio('pA4')">
+        <input type="radio" id="pA4" name="policy-A" value="모바일 운전면허 (mDL)|mdl"><label for="pA4"><span class="policy-name">모바일 운전면허 (mDL)</span><span class="protocol-badge mdl">mDL</span></label>
+      </div>
+    </div>
+    <div class="popup-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-policy-A')">닫기</button>
+      <button class="btn btn-primary" onclick="submitPolicy('A')">선택</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     모달: Policy 선택 — TO-BE B
+════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-policy-B">
+  <div class="popup-box">
+    <div class="popup-header">
+      <h3>Policy 선택</h3>
+      <p>검증에 사용할 Policy를 선택하세요.</p>
+    </div>
+    <div class="popup-body">
+      <div class="filter-row">
+        <button class="filter-chip all active" onclick="filterChip(this, 'all')">전체</button>
+        <button class="filter-chip" onclick="filterChip(this, 'did-vp')"><span class="protocol-badge did-vp" style="margin:0">DID VP</span></button>
+        <button class="filter-chip" onclick="filterChip(this, 'oid4vp')"><span class="protocol-badge oid4vp" style="margin:0">OID4VP</span></button>
+        <button class="filter-chip" onclick="filterChip(this, 'mdl')"><span class="protocol-badge mdl" style="margin:0">mDL</span></button>
+      </div>
+      <div id="chip-list">
+        <div class="policy-item" data-type="did-vp" onclick="selectRadio('pB1')">
+          <input type="radio" id="pB1" name="policy-B" value="운전면허 검증|did-vp"><label for="pB1"><span class="policy-name">운전면허 검증</span><span class="protocol-badge did-vp">DID VP</span></label>
+        </div>
+        <div class="policy-item" data-type="did-vp" onclick="selectRadio('pB2')">
+          <input type="radio" id="pB2" name="policy-B" value="재직증명서 검증|did-vp"><label for="pB2"><span class="policy-name">재직증명서 검증</span><span class="protocol-badge did-vp">DID VP</span></label>
+        </div>
+        <div class="policy-item" data-type="oid4vp" onclick="selectRadio('pB3')">
+          <input type="radio" id="pB3" name="policy-B" value="신분증 검증 (OID4VP)|oid4vp"><label for="pB3"><span class="policy-name">신분증 검증 (OID4VP)</span><span class="protocol-badge oid4vp">OID4VP</span></label>
+        </div>
+        <div class="policy-item" data-type="mdl" onclick="selectRadio('pB4')">
+          <input type="radio" id="pB4" name="policy-B" value="모바일 운전면허 (mDL)|mdl"><label for="pB4"><span class="policy-name">모바일 운전면허 (mDL)</span><span class="protocol-badge mdl">mDL</span></label>
+        </div>
+      </div>
+    </div>
+    <div class="popup-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-policy-B')">닫기</button>
+      <button class="btn btn-primary" onclick="submitPolicy('B')">선택</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     모달: QR 코드 팝업
+════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-qr">
+  <div class="popup-box">
+    <div class="popup-header">
+      <h3>Submit a certificate</h3>
+      <p>To verify your identity, submit your certificate via OpenDID.</p>
+    </div>
+    <div class="qr-area">
+      <div class="qr-info">
+        <div class="policy-line">
+          <span class="label">Policy:</span>
+          <strong id="qr-policy-name">-</strong>
+          <span id="qr-protocol-badge" class="protocol-badge did-vp">DID VP</span>
+        </div>
+        <div class="flow-line" id="qr-flow-info">-</div>
+      </div>
+      <div class="qr-placeholder" style="margin-top: 16px;">
+        <span>QR Code<br/>(POST /demo/api/vp-offer-refresh-call<br/>&rarr; /v2/initiate)</span>
+      </div>
+      <div class="qr-timer">
+        Time left <span class="countdown" id="qr-countdown">03:00</span>
+      </div>
+      <div class="qr-scan-guide">Please scan the QR code with the OpenDID app</div>
+    </div>
+    <div class="popup-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-qr')">Close</button>
+      <button class="btn btn-primary" onclick="alert('Submission Complete!\n\nPOST /demo/api/confirm-verify 호출')">Submission Complete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* ── 프로토콜별 플로우 정보 ── */
+  const FLOW_INFO = {
+    'did-vp': '\u2460 Profile \u2192 \u2461 VP Submit (E2E) \u2192 \u2462 Confirm',
+    'oid4vp': '\u2460 Authorization Request \u2192 \u2461 VP Token \u2192 \u2462 Verify',
+    'mdl':    '\u2460 Device Engagement \u2192 \u2461 mDL Request \u2192 \u2462 Response',
+  };
+
+  /* ── Policy 선택 팝업 열기 ── */
+  function openPolicyPopup(variant) {
+    // 실제 구현: 페이지 로드 시 GET /demo/api/vp-policies 로 미리 조회한 데이터 사용
+    document.getElementById('modal-policy-' + variant).classList.add('open');
+  }
+
+  /* ── 모달 닫기 ── */
+  function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
+  }
+
+  /* ── 라디오 선택 헬퍼 ── */
+  function selectRadio(id) {
+    document.getElementById(id).checked = true;
+  }
+
+  /* ── Policy 선택 → QR 팝업 전환 ── */
+  function submitPolicy(variant) {
+    const selected = document.querySelector('input[name="policy-' + variant + '"]:checked');
+    if (!selected) {
+      alert('Policy를 선택하세요.');
+      return;
+    }
+
+    const [policyName, protocolType] = selected.value.split('|');
+
+    // Policy 선택 팝업 닫기
+    closeModal('modal-policy-' + variant);
+
+    // QR 팝업에 선택 정보 반영
+    document.getElementById('qr-policy-name').textContent = policyName;
+
+    const badge = document.getElementById('qr-protocol-badge');
+    badge.className = 'protocol-badge ' + protocolType;
+    const badgeLabels = { 'did-vp': 'DID VP', 'oid4vp': 'OID4VP', 'mdl': 'mDL' };
+    badge.textContent = badgeLabels[protocolType] || protocolType;
+
+    document.getElementById('qr-flow-info').textContent = FLOW_INFO[protocolType] || '';
+
+    // QR 팝업 열기
+    // 실제 구현: POST /demo/api/vp-offer-refresh-call → QR 이미지 수신
+    document.getElementById('modal-qr').classList.add('open');
+
+    // 타이머 시작
+    startCountdown();
+  }
+
+  /* ── 필터 칩 ── */
+  function filterChip(btn, type) {
+    btn.closest('.filter-row').querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('#chip-list .policy-item').forEach(item => {
+      item.style.display = (type === 'all' || item.dataset.type === type) ? '' : 'none';
+    });
+  }
+
+  /* ── QR 카운트다운 (데모용) ── */
+  let countdownTimer = null;
+  function startCountdown() {
+    clearInterval(countdownTimer);
+    let seconds = 180;
+    const el = document.getElementById('qr-countdown');
+    el.textContent = '03:00';
+    countdownTimer = setInterval(() => {
+      seconds--;
+      if (seconds <= 0) { clearInterval(countdownTimer); seconds = 0; }
+      const m = String(Math.floor(seconds / 60)).padStart(2, '0');
+      const s = String(seconds % 60).padStart(2, '0');
+      el.textContent = m + ':' + s;
+    }, 1000);
+  }
+
+  /* ── 오버레이 클릭으로 닫기 ── */
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.classList.remove('open');
+    });
+  });
+</script>
+</body>
+</html>

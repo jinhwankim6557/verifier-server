@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OID4VCI 관리 시스템</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo-container">LOGO</div>
+            <div class="header-actions">
+                <div class="settings-icon">⚙️</div>
+            </div>
+        </header>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <nav class="sidebar-menu">
+                <div class="menu-item">Issuer 관리</div>
+                <div class="menu-item active">OID4VCI 관리</div>
+                <div class="menu-item submenu" id="menu-issuer-metadata-link">Issuer Metadata</div>
+                <div class="menu-item submenu" id="menu-credential-config-link">Credential Config</div>
+                <div class="menu-item submenu" id="menu-property-link">Property</div>
+                
+                <div class="menu-item">VC 관리</div>
+                <div class="menu-item">ZKP 관리</div>
+                <div class="menu-item">사용자 관리</div>
+                <div class="menu-item">발급 VC 관리</div>
+                <div class="menu-item">Admin 관리</div>
+                <div class="menu-item">로그 관리</div>
+                <div class="menu-item">서버 설정</div>
+            </nav>
+        </aside>
+
+        <!-- Main Wrapper -->
+        <div class="main-wrapper">
+            <!-- Screen 1: Issuer Metadata View -->
+            <main class="content-area" id="screen-issuer-metadata-view">
+                <div class="card">
+                    <div class="page-title">OID4VCI 관리</div>
+                    <div class="section-header">
+                        <h2 class="section-title">Issuer Metadata</h2>
+                        <button class="btn btn-primary" id="btn-edit-issuer-metadata">변경</button>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Endpoint</label>
+                        <div class="form-text">http://127.0.0.1:8090</div>
+                    </div>
+
+                    <div class="form-group" style="align-items: flex-start;">
+                        <label class="form-label">Encryption</label>
+                        <div>
+                            <div class="tree-node">
+                                <div class="tree-label">Alg values supported</div>
+                                <div class="tree-value">- RSA-OAEP</div>
+                                <div class="tree-value">- RSA OAEP-256</div>
+                            </div>
+                            <div class="tree-node">
+                                <div class="tree-label">Enc Values supported</div>
+                                <div class="tree-value">- A128CBC-HS256</div>
+                                <div class="tree-value">- A128GCM</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" style="width: auto; margin-right: 24px;">Required Credential Response Encryption</label>
+                        <label class="switch">
+                            <input type="checkbox" checked disabled>
+                            <span class="slider">
+                                <span class="slider-label slider-on">ON</span>
+                                <span class="slider-label slider-off">OFF</span>
+                            </span>
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" style="width: auto; margin-right: 24px;">Credential Identifiers Supported</label>
+                        <label class="switch">
+                            <input type="checkbox" checked disabled>
+                            <span class="slider">
+                                <span class="slider-label slider-on">ON</span>
+                                <span class="slider-label slider-off">OFF</span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Screen 2: Issuer Metadata Edit -->
+            <main class="content-area hidden" id="screen-issuer-metadata-edit">
+                <div class="card">
+                    <div class="page-title">OID4VCI 관리</div>
+                    <div class="section-header">
+                        <h2 class="section-title">Issuer Metadata</h2>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-primary" id="btn-save-issuer-metadata">변경</button>
+                            <button class="btn btn-danger" id="btn-cancel-edit-metadata">취소</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Endpoint</label>
+                        <input type="text" class="form-control" value="http://127.0.0.1:8090">
+                    </div>
+
+                    <div class="form-group" style="align-items: flex-start;">
+                        <label class="form-label">Encryption</label>
+                        <div style="flex-grow: 1;">
+                            <div class="tree-node">
+                                <div class="tree-label">Alg values supported</div>
+                                <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                                    <input type="text" class="form-control" value="RSA-OAEP">
+                                    <div style="display: flex; gap: 8px;">
+                                        <input type="text" class="form-control" placeholder="+">
+                                        <button class="btn btn-outline" style="padding: 4px 12px;">+</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tree-node">
+                                <div class="tree-label">Enc Values supported</div>
+                                <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                                    <input type="text" class="form-control" value="A128CBC-HS256">
+                                    <div style="display: flex; gap: 8px;">
+                                        <input type="text" class="form-control" placeholder="+">
+                                        <button class="btn btn-outline" style="padding: 4px 12px;">+</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" style="width: auto; margin-right: 24px;">Required Credential Response Encryption</label>
+                        <label class="switch">
+                            <input type="checkbox" checked>
+                            <span class="slider">
+                                <span class="slider-label slider-on">ON</span>
+                                <span class="slider-label slider-off">OFF</span>
+                            </span>
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" style="width: auto; margin-right: 24px;">Credential Identifiers Supported</label>
+                        <label class="switch">
+                            <input type="checkbox" checked>
+                            <span class="slider">
+                                <span class="slider-label slider-on">ON</span>
+                                <span class="slider-label slider-off">OFF</span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Screen 3: Credential Config List -->
+            <main class="content-area hidden" id="screen-credential-config-list">
+                <div class="card">
+                    <div class="page-title">OID4VCI 관리</div>
+                    <div class="section-header">
+                        <h2 class="section-title">Credential Config</h2>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-outline">🔄</button>
+                            <button class="btn btn-primary" id="btn-add-credential">등록</button>
+                        </div>
+                    </div>
+
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>선택</th>
+                                <th>ID</th>
+                                <th>Format</th>
+                                <th>등록일시</th>
+                                <th>수정일시</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><input type="radio" name="cred-select"></td>
+                                <td><a href="#" style="color: var(--primary); text-decoration: none;" id="link-credential-detail">VerifiableSD</a></td>
+                                <td>dc+sd-jwt</td>
+                                <td>2025-01-01 09:00:00</td>
+                                <td>2025-01-01 09:00:00</td>
+                            </tr>
+                            <tr>
+                                <td><input type="radio" name="cred-select"></td>
+                                <td><a href="#" style="color: var(--primary); text-decoration: none;">NationalID</a></td>
+                                <td>mso-mdoc</td>
+                                <td>2025-01-01 09:00:00</td>
+                                <td>2025-01-01 09:00:00</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </main>
+
+            <!-- Screen 4: Credential Registration -->
+            <main class="content-area hidden" id="screen-credential-register">
+                <div class="card">
+                    <div class="page-title">OID4VCI 관리</div>
+                    <div class="section-header">
+                        <h2 class="section-title">Credential</h2>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">ID</label>
+                        <input type="text" class="form-control" placeholder="ID 입력">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">format</label>
+                        <input type="text" class="form-control" placeholder="format 입력">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Identifiers</label>
+                        <div style="display: flex; flex-direction: column; gap: 8px; flex-grow: 1;">
+                            <input type="text" class="form-control">
+                            <div>
+                                <button class="btn btn-outline" style="padding: 4px 12px;">+</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 32px;">
+                        <h3 style="font-size: 16px; margin-bottom: 12px;">Credential Configuration Supported</h3>
+                        <div class="json-viewer" contenteditable="true">{
+  "UniversityDegree": {
+    "format": "jwt_vc",
+    "doctype": "UniversityDegree"
+  },
+  "VerifiableSD": {
+    "format": "dc+sd-jwt",
+    "scope": "SD_JWT_VC_example_in_OpenID4VCI",
+    "cryptographic_binding_methods_supported": ["jwk"],
+    "credential_signing_alg_values_supported": ["ES256"],
+    "display": [
+      {
+        "name": "IdentityCredential",
+        "logo": {
+          "url": "..."
+        }
+      }
+    ]
+  }
+}</div>
+                    </div>
+
+                    <div style="display: flex; justify-content: center; margin-top: 32px;">
+                        <button class="btn btn-primary" id="btn-save-credential">등록</button>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Screen 5: Property -->
+            <main class="content-area hidden" id="screen-property">
+                <div class="card">
+                    <div class="page-title">OID4VCI 관리</div>
+                    <div class="section-header">
+                        <h2 class="section-title">Property</h2>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Auth setting 1</label>
+                        <input type="text" class="form-control" placeholder="">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Auth setting 2</label>
+                        <input type="text" class="form-control" placeholder="">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Auth setting 3</label>
+                        <input type="text" class="form-control" placeholder="">
+                    </div>
+
+                    <div style="display: flex; justify-content: center; margin-top: 32px;">
+                        <button class="btn btn-primary" id="btn-save-property">저장</button>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Right Help Panel (Dynamic based on screen) -->
+            <aside class="help-panel" id="help-panel">
+                <div id="help-content-metadata">
+                    <h2 class="help-title">Issuer Metadata 관리</h2>
+                    <p class="help-subtitle">페이지 진입 조건</p>
+                    <div class="help-item">OID4VCI 관리 클릭</div>
+                    <div class="help-item">Issuer Metadata 변경 페이지에서 취소 버튼 클릭</div>
+
+                    <p class="help-subtitle">초기 화면</p>
+                    <div class="help-item">Issuer Metadata 정보 출력</div>
+
+                    <p class="help-action-title">1. 변경 버튼</p>
+                    <p class="help-action-desc">클릭하면 Issuer Metadata 수정 페이지로 이동</p>
+                </div>
+
+                <div id="help-content-metadata-edit" class="hidden">
+                    <h2 class="help-title">Issuer Metadata 변경</h2>
+                    <p class="help-subtitle">페이지 진입 조건</p>
+                    <div class="help-item">Issuer Metadata 관리 페이지에서 변경 버튼 클릭</div>
+
+                    <p class="help-subtitle">초기 화면</p>
+                    <div class="help-item">Issuer Metadata 정보 변경 화면</div>
+
+                    <p class="help-action-title">1. 변경 버튼</p>
+                    <p class="help-action-desc">클릭하면 Issuer Metadata 변경 완료 후 관리 페이지로 이동</p>
+                    
+                    <p class="help-action-title">2. 취소 버튼</p>
+                    <p class="help-action-desc">클릭하면 Issuer Metadata 관리 페이지로 이동</p>
+
+                    <p class="help-action-title">3. + 버튼</p>
+                    <p class="help-action-desc">클릭하면 입력 박스 추가</p>
+                </div>
+
+                <div id="help-content-config" class="hidden">
+                    <h2 class="help-title">Credential Config 관리</h2>
+                    <p class="help-subtitle">페이지 진입 조건</p>
+                    <div class="help-item">Credential Config 관리 클릭</div>
+                    <div class="help-item">Credential 등록 페이지에서 취소 버튼 클릭</div>
+
+                    <p class="help-subtitle">초기 화면</p>
+                    <div class="help-item">Credential 목록 출력</div>
+
+                    <p class="help-action-title">1. Credential 등록 버튼</p>
+                    <p class="help-action-desc">클릭하면 Credential 등록 페이지로 이동</p>
+
+                    <p class="help-action-title">2. Credential 테이블</p>
+                    <p class="help-action-desc">ID 순서대로 출력</p>
+
+                    <p class="help-action-title">3. Credential ID</p>
+                    <p class="help-action-desc">클릭하면 해당 Credential 상세 정보 페이지 이동</p>
+                </div>
+
+                <div id="help-content-register" class="hidden">
+                    <h2 class="help-title">Credential 등록</h2>
+                    <p class="help-subtitle">페이지 진입 조건</p>
+                    <div class="help-item">Credential 관리 페이지에서 등록 버튼 클릭</div>
+
+                    <p class="help-action-title">1. 등록 버튼</p>
+                    <p class="help-action-desc">클릭하면 Credential 등록</p>
+
+                    <p class="help-action-title">2. + 버튼</p>
+                    <p class="help-action-desc">클릭하면 Identifier 입력 박스 추가</p>
+                </div>
+
+                <div id="help-content-property" class="hidden">
+                    <h2 class="help-title">Property 관리</h2>
+                    <p class="help-subtitle">페이지 진입 조건</p>
+                    <div class="help-item">Property 클릭</div>
+
+                    <p class="help-action-title">1. 저장 버튼</p>
+                    <p class="help-action-desc">클릭하면 Property 저장</p>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

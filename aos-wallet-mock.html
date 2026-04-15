@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>AOS Demo Wallet — Mock</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      display: flex;
+      justify-content: center;
+      padding: 40px 20px;
+      min-height: 100vh;
+    }
+
+    /* ── 모바일 프레임 ── */
+    .phone-frame {
+      width: 375px;
+      min-height: 700px;
+      background: #fff;
+      border-radius: 40px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+      overflow: hidden;
+      position: relative;
+      border: 8px solid #333;
+    }
+    .phone-notch {
+      width: 150px;
+      height: 28px;
+      background: #333;
+      border-radius: 0 0 16px 16px;
+      margin: 0 auto;
+    }
+    .phone-content {
+      padding: 0;
+      height: 100%;
+    }
+
+    /* ── 상태바 ── */
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 20px;
+      font-size: 12px;
+      color: #333;
+      font-weight: 600;
+    }
+    .status-bar .time { font-size: 14px; font-weight: 700; }
+    .status-icons { display: flex; gap: 4px; align-items: center; }
+    .status-icons span { font-size: 12px; }
+
+    /* ── 앱 화면 공통 ── */
+    .screen {
+      display: none;
+      flex-direction: column;
+      height: calc(100% - 36px);
+      padding: 0 20px 20px;
+    }
+    .screen.active { display: flex; }
+
+    /* ── 메인 화면 ── */
+    .app-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #1a1a2e;
+      text-align: center;
+      margin: 40px 0 8px;
+    }
+    .app-subtitle {
+      font-size: 13px;
+      color: #999;
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    /* ── Credential 카드 ── */
+    .credential-card {
+      background: linear-gradient(135deg, #2F325E 0%, #4a4d80 100%);
+      border-radius: 16px;
+      padding: 20px;
+      color: #fff;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 16px rgba(47,50,94,0.3);
+    }
+    .credential-card .card-type {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      opacity: 0.7;
+      margin-bottom: 16px;
+    }
+    .credential-card .card-name {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .credential-card .card-id {
+      font-size: 12px;
+      opacity: 0.6;
+      font-family: monospace;
+    }
+    .credential-card .card-details {
+      display: flex;
+      gap: 24px;
+      margin-top: 16px;
+      font-size: 12px;
+    }
+    .credential-card .card-details .detail-label {
+      opacity: 0.6;
+      margin-bottom: 2px;
+    }
+    .credential-card .card-details .detail-value {
+      font-weight: 600;
+    }
+
+    /* ── 버튼 ── */
+    .btn-scan {
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-scan.primary {
+      background: #2F325E;
+      color: #fff;
+    }
+    .btn-scan.primary:hover { background: #3d4070; }
+    .btn-scan.secondary {
+      background: #f5f5f5;
+      color: #333;
+      margin-top: 12px;
+    }
+    .btn-scan .icon { font-size: 20px; }
+
+    .status-text {
+      text-align: center;
+      font-size: 14px;
+      color: #999;
+      margin-top: 20px;
+      min-height: 20px;
+    }
+
+    /* ── QR 스캐너 화면 ── */
+    .scanner-area {
+      flex: 1;
+      background: #000;
+      border-radius: 16px;
+      margin: 16px 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .scanner-viewfinder {
+      width: 220px;
+      height: 220px;
+      border: 3px solid rgba(255,255,255,0.6);
+      border-radius: 16px;
+      position: relative;
+    }
+    .scanner-viewfinder::before,
+    .scanner-viewfinder::after {
+      content: '';
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      border-color: #4CAF50;
+      border-style: solid;
+    }
+    .scanner-viewfinder::before {
+      top: -2px; left: -2px;
+      border-width: 4px 0 0 4px;
+      border-radius: 8px 0 0 0;
+    }
+    .scanner-viewfinder::after {
+      bottom: -2px; right: -2px;
+      border-width: 0 4px 4px 0;
+      border-radius: 0 0 8px 0;
+    }
+    .scanner-line {
+      position: absolute;
+      width: 200px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #4CAF50, transparent);
+      top: 50%;
+      animation: scanLine 2s infinite ease-in-out;
+    }
+    @keyframes scanLine {
+      0%, 100% { top: 20%; }
+      50% { top: 80%; }
+    }
+    .scanner-prompt {
+      color: #fff;
+      font-size: 14px;
+      margin-top: 24px;
+      text-align: center;
+      opacity: 0.8;
+    }
+    .scanner-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 0;
+    }
+    .scanner-header h3 { font-size: 18px; font-weight: 600; color: #1a1a2e; }
+    .btn-back {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #333;
+      padding: 4px 8px;
+    }
+
+    /* ── Consent 다이얼로그 ── */
+    .dialog-overlay {
+      display: none;
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 100;
+      justify-content: center;
+      align-items: flex-end;
+      padding: 20px;
+    }
+    .dialog-overlay.open { display: flex; }
+    .dialog-sheet {
+      background: #fff;
+      border-radius: 20px;
+      width: 100%;
+      overflow: hidden;
+      animation: slideUp 0.3s ease-out;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .dialog-header {
+      padding: 20px 20px 12px;
+      text-align: center;
+    }
+    .dialog-header .dialog-icon {
+      width: 48px;
+      height: 48px;
+      background: #e3f2fd;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 12px;
+      font-size: 24px;
+    }
+    .dialog-header h4 {
+      font-size: 17px;
+      color: #1a1a2e;
+      margin-bottom: 4px;
+    }
+    .dialog-header p {
+      font-size: 13px;
+      color: #888;
+      line-height: 1.4;
+    }
+    .dialog-body {
+      padding: 0 20px 12px;
+    }
+    .claim-list {
+      background: #f9f9f9;
+      border-radius: 12px;
+      padding: 12px 16px;
+    }
+    .claim-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      font-size: 14px;
+      border-bottom: 1px solid #eee;
+    }
+    .claim-item:last-child { border-bottom: none; }
+    .claim-item .claim-label { color: #888; }
+    .claim-item .claim-value { color: #333; font-weight: 500; }
+    .dialog-footer {
+      padding: 12px 20px 20px;
+      display: flex;
+      gap: 10px;
+    }
+    .dialog-footer .btn-dialog {
+      flex: 1;
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-dialog.cancel { background: #f0f0f0; color: #555; }
+    .btn-dialog.submit { background: #2F325E; color: #fff; }
+
+    /* ── 전송 중 화면 ── */
+    .sending-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid #e0e0e0;
+      border-top: 4px solid #2F325E;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .sending-text {
+      font-size: 16px;
+      color: #666;
+    }
+
+    /* ── 결과 화면 ── */
+    .result-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .result-icon {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      margin-bottom: 8px;
+    }
+    .result-icon.success { background: #e8f5e9; }
+    .result-icon.error   { background: #fce4ec; }
+    .result-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: #1a1a2e;
+    }
+    .result-desc {
+      font-size: 14px;
+      color: #888;
+      text-align: center;
+      line-height: 1.4;
+    }
+
+    /* ── 플로우 가이드 (폰 외부) ── */
+    .flow-guide {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+      padding: 16px 20px;
+      max-width: 320px;
+      font-size: 13px;
+      z-index: 500;
+    }
+    .flow-guide h4 {
+      font-size: 14px;
+      color: #1a1a2e;
+      margin-bottom: 10px;
+    }
+    .flow-guide .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 6px 0;
+    }
+    .flow-guide .step-num {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #e0e0e0;
+      color: #888;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .flow-guide .step-num.active {
+      background: #2F325E;
+      color: #fff;
+    }
+    .flow-guide .step-num.done {
+      background: #4CAF50;
+      color: #fff;
+    }
+    .flow-guide .step-text { color: #666; line-height: 1.4; }
+    .flow-guide .step-text.active { color: #1a1a2e; font-weight: 600; }
+
+    /* ── 진입 경로 토글 ── */
+    .entry-toggle {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+      padding: 16px 20px;
+      z-index: 500;
+    }
+    .entry-toggle h4 {
+      font-size: 14px;
+      color: #1a1a2e;
+      margin-bottom: 10px;
+    }
+    .entry-btn {
+      display: block;
+      width: 100%;
+      padding: 10px 14px;
+      margin-bottom: 6px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      background: #fff;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: left;
+      color: #555;
+      transition: all 0.15s;
+    }
+    .entry-btn:last-child { margin-bottom: 0; }
+    .entry-btn.active {
+      border-color: #2F325E;
+      background: #f0f0ff;
+      color: #2F325E;
+      font-weight: 600;
+    }
+    .entry-btn .entry-desc {
+      font-size: 11px;
+      color: #999;
+      margin-top: 2px;
+    }
+
+    /* ── Protocol Badge ── */
+    .protocol-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      vertical-align: middle;
+    }
+    .protocol-badge.did-vp  { background: #e8f5e9; color: #2e7d32; }
+    .protocol-badge.oid4vp  { background: #e3f2fd; color: #1565c0; }
+
+    /* ── 코드 주석 영역 ── */
+    .code-ref {
+      margin-top: auto;
+      padding: 10px 12px;
+      background: #f5f5f5;
+      border-radius: 8px;
+      font-size: 11px;
+      color: #999;
+      font-family: 'SF Mono', Menlo, monospace;
+      line-height: 1.5;
+    }
+    .code-ref strong { color: #666; font-weight: 600; }
+
+    @media (max-width: 900px) {
+      .flow-guide, .entry-toggle { display: none; }
+      body { padding: 20px 10px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── 진입 경로 선택 패널 ── -->
+<div class="entry-toggle">
+  <h4>진입 경로</h4>
+  <button class="entry-btn active" onclick="setEntryMode('qr')">
+    QR Scan
+    <div class="entry-desc">앱에서 직접 QR 스캔</div>
+  </button>
+  <button class="entry-btn" onclick="setEntryMode('deeplink')">
+    Deep Link
+    <div class="entry-desc">did-demo://verify?offerId=xxx</div>
+  </button>
+  <button class="entry-btn" onclick="setEntryMode('credential-manager')">
+    Credential Manager
+    <div class="entry-desc">Android 브라우저 → 시스템 시트</div>
+  </button>
+</div>
+
+<!-- ── 플로우 가이드 패널 ── -->
+<div class="flow-guide" id="flowGuide">
+  <h4>AOS Wallet 플로우</h4>
+  <div class="step"><span class="step-num active" id="fs1">1</span><span class="step-text active" id="ft1">앱 실행 (메인 화면)</span></div>
+  <div class="step"><span class="step-num" id="fs2">2</span><span class="step-text" id="ft2">QR 스캔 / Deep Link / Credential Manager</span></div>
+  <div class="step"><span class="step-num" id="fs3">3</span><span class="step-text" id="ft3">offerId 파싱</span></div>
+  <div class="step"><span class="step-num" id="fs4">4</span><span class="step-text" id="ft4">Consent 다이얼로그 (제출 동의)</span></div>
+  <div class="step"><span class="step-num" id="fs5">5</span><span class="step-text" id="ft5">Mock VP 생성 + 서버 전송</span></div>
+  <div class="step"><span class="step-num" id="fs6">6</span><span class="step-text" id="ft6">결과 표시</span></div>
+</div>
+
+<!-- ── 모바일 프레임 ── -->
+<div class="phone-frame">
+  <div class="phone-notch"></div>
+  <div class="phone-content">
+    <div class="status-bar">
+      <span class="time" id="clockDisplay">12:00</span>
+      <div class="status-icons">
+        <span>&#x1F4F6;</span>
+        <span>&#x1F50B;</span>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         Screen 1: 메인 화면
+    ════════════════════════════════════ -->
+    <div class="screen active" id="screen-main">
+      <div class="app-title">Digital ID Wallet</div>
+      <div class="app-subtitle">OpenDID Demo Wallet</div>
+
+      <div class="credential-card">
+        <div class="card-type">mDoc Credential</div>
+        <div class="card-name">Hong Gildong</div>
+        <div class="card-id">mDoc_1 &bull; com.example.mdoc</div>
+        <div class="card-details">
+          <div>
+            <div class="detail-label">Birth Date</div>
+            <div class="detail-value">1990-01-01</div>
+          </div>
+          <div>
+            <div class="detail-label">Issued</div>
+            <div class="detail-value">2024-01-01</div>
+          </div>
+          <div>
+            <div class="detail-label">Expires</div>
+            <div class="detail-value">2034-01-01</div>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-scan primary" onclick="goToScan()">
+        <span class="icon">&#x1F4F7;</span>
+        Scan QR Code
+      </button>
+
+      <div class="status-text" id="mainStatus">Ready to scan</div>
+
+      <div class="code-ref" style="margin-top: auto;">
+        <strong>MainActivity.kt</strong><br/>
+        scanButton.setOnClickListener { startQRScanner() }<br/>
+        MockCredentialStorage.initialize() // 앱 시작 시 Mock credential 로드
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         Screen 2: QR 스캐너
+    ════════════════════════════════════ -->
+    <div class="screen" id="screen-scanner">
+      <div class="scanner-header">
+        <button class="btn-back" onclick="goToMain()">&larr;</button>
+        <h3>QR Scanner</h3>
+        <div style="width:40px"></div>
+      </div>
+
+      <div class="scanner-area" onclick="simulateScan()">
+        <div class="scanner-viewfinder">
+          <div class="scanner-line"></div>
+        </div>
+        <div class="scanner-prompt">
+          Scan the Digital Credential QR Code<br/>
+          <span style="font-size:12px; opacity:0.6; margin-top:8px; display:block;">(Click to simulate scan)</span>
+        </div>
+      </div>
+
+      <div class="code-ref">
+        <strong>QRScannerActivity.kt</strong> (ZXing)<br/>
+        IntentIntegrator.setPrompt("Scan the Digital Credential QR Code")<br/>
+        <strong>MainActivity.kt:95</strong> handleScannedData(data)
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         Screen 3: Deep Link 수신
+    ════════════════════════════════════ -->
+    <div class="screen" id="screen-deeplink">
+      <div class="scanner-header">
+        <button class="btn-back" onclick="goToMain()">&larr;</button>
+        <h3>Deep Link Received</h3>
+        <div style="width:40px"></div>
+      </div>
+
+      <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px;">
+        <div style="font-size:48px;">&#x1F517;</div>
+        <div style="font-size:14px; color:#666; text-align:center;">
+          Deep Link로 앱이 실행되었습니다
+        </div>
+        <div style="background:#f5f5f5; border-radius:8px; padding:10px 14px; font-family:monospace; font-size:12px; color:#888; word-break:break-all; max-width:100%;">
+          did-demo://verify?offerId=<span style="color:#2F325E; font-weight:600;">abc-123-xyz</span>
+        </div>
+        <div style="font-size:13px; color:#999; margin-top:8px;">
+          offerId 파싱 중...
+        </div>
+      </div>
+
+      <div class="code-ref">
+        <strong>MainActivity.kt:50-61</strong><br/>
+        handleIntent → data.scheme == "did-demo" && data.host == "verify"<br/>
+        val offerId = data.getQueryParameter("offerId")
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         Screen 4: Credential Manager
+    ════════════════════════════════════ -->
+    <div class="screen" id="screen-credman">
+      <div class="scanner-header">
+        <button class="btn-back" onclick="goToMain()">&larr;</button>
+        <h3>Credential Manager</h3>
+        <div style="width:40px"></div>
+      </div>
+
+      <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px;">
+        <div style="font-size:48px;">&#x1F4B3;</div>
+        <div style="font-size:14px; color:#666; text-align:center; line-height:1.5;">
+          브라우저에서 Digital Credentials API 요청을 받아<br/>
+          Android 시스템 시트가 표시되었습니다
+        </div>
+        <div style="background:#f5f5f5; border-radius:12px; padding:16px; width:100%; margin-top:8px;">
+          <div style="font-size:12px; color:#999; margin-bottom:8px;">System Bottom Sheet</div>
+          <div style="display:flex; align-items:center; gap:12px; padding:12px; background:#fff; border-radius:8px; border:2px solid #2F325E;">
+            <div style="width:40px; height:40px; background:#2F325E; border-radius:8px; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:14px;">DW</div>
+            <div>
+              <div style="font-size:14px; font-weight:600; color:#333;">Demo Wallet</div>
+              <div style="font-size:12px; color:#888;">Submit Hong Gildong</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="code-ref">
+        <strong>DemoCredentialProviderService.kt</strong><br/>
+        onBeginGetCredential → CredentialEntry 생성<br/>
+        PendingIntent → MainActivity (CREDENTIAL_REQUEST=true)
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         Screen 5: VP 전송 중
+    ════════════════════════════════════ -->
+    <div class="screen" id="screen-sending">
+      <div class="scanner-header">
+        <div style="width:40px"></div>
+        <h3>Submitting</h3>
+        <div style="width:40px"></div>
+      </div>
+
+      <div class="sending-area">
+        <div class="spinner"></div>
+        <div class="sending-text">Sending VP...</div>
+        <div style="font-size:12px; color:#bbb;">POST /demo/api/verify-vp</div>
+      </div>
+
+      <div class="code-ref">
+        <strong>MainActivity.kt:132-176</strong><br/>
+        sendVP(vpData) → OkHttp POST<br/>
+        <strong>WalletService.kt:8</strong> generateMockVP() → mDoc VP 구조 생성
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         Screen 6: 성공 결과
+    ════════════════════════════════════ -->
+    <div class="screen" id="screen-success">
+      <div class="scanner-header">
+        <div style="width:40px"></div>
+        <h3>Result</h3>
+        <div style="width:40px"></div>
+      </div>
+
+      <div class="result-area">
+        <div class="result-icon success">&#x2705;</div>
+        <div class="result-title">VP Verified!</div>
+        <div class="result-desc">Credentials Submitted Successfully!</div>
+
+        <div class="claim-list" style="width:100%; margin-top:16px;">
+          <div class="claim-item">
+            <span class="claim-label">given_name</span>
+            <span class="claim-value">Gildong</span>
+          </div>
+          <div class="claim-item">
+            <span class="claim-label">family_name</span>
+            <span class="claim-value">Hong</span>
+          </div>
+          <div class="claim-item">
+            <span class="claim-label">birth_date</span>
+            <span class="claim-value">1990-01-01</span>
+          </div>
+          <div class="claim-item">
+            <span class="claim-label">issue_date</span>
+            <span class="claim-value">2026-03-12T...</span>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-scan primary" onclick="resetToMain()" style="margin-top: auto;">
+        OK — Back to Home
+      </button>
+
+      <div class="code-ref">
+        <strong>MainActivity.kt:162-167</strong><br/>
+        AlertDialog "Credentials Submitted Successfully!"
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         Screen 7: 실패 결과
+    ════════════════════════════════════ -->
+    <div class="screen" id="screen-error">
+      <div class="scanner-header">
+        <div style="width:40px"></div>
+        <h3>Result</h3>
+        <div style="width:40px"></div>
+      </div>
+
+      <div class="result-area">
+        <div class="result-icon error">&#x274C;</div>
+        <div class="result-title">Verification Failed</div>
+        <div class="result-desc">Network Error or Server Rejected</div>
+      </div>
+
+      <button class="btn-scan primary" onclick="resetToMain()" style="margin-top: auto;">
+        OK — Back to Home
+      </button>
+
+      <div class="code-ref">
+        <strong>MainActivity.kt:147-149</strong><br/>
+        onFailure → "Failed: ${e.message}"
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         Consent 다이얼로그 (오버레이)
+    ════════════════════════════════════ -->
+    <div class="dialog-overlay" id="consentDialog">
+      <div class="dialog-sheet">
+        <div class="dialog-header">
+          <div class="dialog-icon">&#x1F512;</div>
+          <h4>Submit Digital ID?</h4>
+          <p>Service is requesting your Digital ID.</p>
+        </div>
+        <div class="dialog-body">
+          <div class="claim-list">
+            <div class="claim-item">
+              <span class="claim-label">given_name</span>
+              <span class="claim-value">Gildong</span>
+            </div>
+            <div class="claim-item">
+              <span class="claim-label">family_name</span>
+              <span class="claim-value">Hong</span>
+            </div>
+            <div class="claim-item">
+              <span class="claim-label">birth_date</span>
+              <span class="claim-value">1990-01-01</span>
+            </div>
+          </div>
+          <div style="margin-top:10px; padding:8px 12px; background:#f0f0ff; border-radius:8px; font-size:12px; color:#666;">
+            <strong>offerId:</strong> <span id="consentOfferId" style="font-family:monospace;">abc-123-xyz</span>
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button class="btn-dialog cancel" onclick="cancelConsent()">Cancel</button>
+          <button class="btn-dialog submit" onclick="submitConsent()">Submit</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  /* ── 상태 관리 ── */
+  let currentScreen = 'main';
+  let entryMode = 'qr'; // qr | deeplink | credential-manager
+
+  /* ── 시계 ── */
+  function updateClock() {
+    const now = new Date();
+    document.getElementById('clockDisplay').textContent =
+      now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+  }
+  updateClock();
+  setInterval(updateClock, 30000);
+
+  /* ── 화면 전환 ── */
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById('screen-' + id).classList.add('active');
+    currentScreen = id;
+  }
+
+  /* ── 플로우 가이드 업데이트 ── */
+  function updateFlowStep(step) {
+    for (let i = 1; i <= 6; i++) {
+      const numEl = document.getElementById('fs' + i);
+      const textEl = document.getElementById('ft' + i);
+      numEl.className = 'step-num';
+      textEl.className = 'step-text';
+      if (i < step) {
+        numEl.classList.add('done');
+      } else if (i === step) {
+        numEl.classList.add('active');
+        textEl.classList.add('active');
+      }
+    }
+  }
+
+  /* ── 진입 경로 전환 ── */
+  function setEntryMode(mode) {
+    entryMode = mode;
+    document.querySelectorAll('.entry-btn').forEach(b => b.classList.remove('active'));
+    event.target.closest('.entry-btn').classList.add('active');
+    resetToMain();
+  }
+
+  /* ── 메인 화면 ── */
+  function goToMain() {
+    showScreen('main');
+    updateFlowStep(1);
+  }
+
+  function resetToMain() {
+    document.getElementById('consentDialog').classList.remove('open');
+    showScreen('main');
+    document.getElementById('mainStatus').textContent = 'Ready to scan';
+    updateFlowStep(1);
+  }
+
+  /* ── QR 스캔 진입 ── */
+  function goToScan() {
+    if (entryMode === 'qr') {
+      showScreen('scanner');
+      updateFlowStep(2);
+    } else if (entryMode === 'deeplink') {
+      showScreen('deeplink');
+      updateFlowStep(2);
+      // 자동으로 consent 표시
+      setTimeout(() => {
+        updateFlowStep(3);
+        setTimeout(() => showConsent('abc-123-xyz'), 800);
+      }, 1500);
+    } else if (entryMode === 'credential-manager') {
+      showScreen('credman');
+      updateFlowStep(2);
+      // 자동으로 consent 표시
+      setTimeout(() => {
+        updateFlowStep(3);
+        setTimeout(() => showConsent('browser-session'), 800);
+      }, 2000);
+    }
+  }
+
+  /* ── QR 스캔 시뮬레이션 ── */
+  function simulateScan() {
+    updateFlowStep(3);
+    // QR 데이터: did-demo://verify?offerId=xxx 파싱 시뮬
+    document.querySelector('.scanner-prompt').innerHTML =
+      'Scanned!<br/><span style="font-size:11px; color:#4CAF50;">did-demo://verify?offerId=abc-123-xyz</span>';
+
+    setTimeout(() => showConsent('abc-123-xyz'), 1000);
+  }
+
+  /* ── Consent 다이얼로그 ── */
+  function showConsent(offerId) {
+    updateFlowStep(4);
+    document.getElementById('consentOfferId').textContent = offerId;
+    document.getElementById('consentDialog').classList.add('open');
+  }
+
+  function cancelConsent() {
+    document.getElementById('consentDialog').classList.remove('open');
+    document.getElementById('mainStatus').textContent = 'Submission Cancelled';
+    showScreen('main');
+    updateFlowStep(1);
+  }
+
+  function submitConsent() {
+    document.getElementById('consentDialog').classList.remove('open');
+    updateFlowStep(5);
+    showScreen('sending');
+
+    // VP 전송 시뮬레이션
+    setTimeout(() => {
+      updateFlowStep(6);
+      showScreen('success');
+    }, 2000);
+  }
+</script>
+</body>
+</html>

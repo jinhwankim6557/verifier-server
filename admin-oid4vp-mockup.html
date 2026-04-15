@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>OID4VP Admin Mockup (DCQL 기반)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif; background: #f5f5f5; font-size: 14px; }
+
+    .top-nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: #0d0d1a; padding: 8px 16px;
+      display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+    }
+    .top-nav span { color: #666; font-size: 11px; margin-right: 4px; }
+    .snav { padding: 5px 14px; border-radius: 14px; border: 1px solid #333; background: transparent; font-size: 12px; cursor: pointer; color: #aaa; }
+    .snav.active { background: #3949ab; color: #fff; border-color: #3949ab; }
+    .screen { display: none; height: calc(100vh - 42px); margin-top: 42px; }
+    .screen.visible { display: flex; }
+
+    .sidebar { width: 232px; flex-shrink: 0; background: #1a1a2e; color: #ccc; overflow-y: auto; }
+    .logo { padding: 18px 16px 12px; font-size: 14px; font-weight: 700; color: #fff; border-bottom: 1px solid #2a2a4a; display: flex; align-items: center; gap: 8px; }
+    .ndivider { height: 1px; background: #2a2a4a; margin: 4px 0; }
+    .ni { display: flex; align-items: center; gap: 8px; padding: 8px 16px; cursor: pointer; font-size: 12.5px; color: #aaa; }
+    .ni:hover { background: #2a2a4a; color: #fff; }
+    .ni.active { background: #2F325E; color: #fff; }
+    .ni.parent { font-weight: 600; color: #ddd; padding: 10px 16px 6px; }
+    .ni.child { padding-left: 30px; }
+    .ni .dot { width: 5px; height: 5px; border-radius: 50%; background: #444; flex-shrink: 0; }
+    .ni.active .dot { background: #7c8cf8; }
+    .ni .ico { font-size: 14px; width: 16px; text-align: center; }
+    .nbadge { margin-left: auto; background: #388e3c; color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 6px; }
+
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .topbar { height: 48px; background: #fff; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; padding: 0 24px; flex-shrink: 0; }
+    .bc { font-size: 12px; color: #999; } .bc b { color: #333; }
+    .content { flex: 1; overflow-y: auto; padding: 24px; }
+
+    .page-title { font-size: 20px; font-weight: 700; color: #1a1a2e; margin-bottom: 6px; }
+    .page-sub { font-size: 13px; color: #888; margin-bottom: 20px; }
+    .card { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); padding: 20px; margin-bottom: 16px; }
+    .card-title { font-size: 14px; font-weight: 600; color: #333; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+
+    .fg { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+    .fg label { font-size: 11px; color: #666; font-weight: 500; }
+    .fg label.req::after { content: ' *'; color: #d32f2f; }
+    .fi { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; color: #333; }
+    .fi:focus { outline: none; border-color: #3949ab; }
+    .fi.ro { background: #fafafa; color: #666; }
+    .fi-hint { font-size: 11px; color: #999; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .ibtn { display: flex; gap: 8px; }
+    .ibtn .fi { flex: 1; }
+
+    .btn { padding: 7px 18px; border-radius: 4px; font-size: 12px; cursor: pointer; border: none; font-weight: 500; }
+    .btn-p { background: #3949ab; color: #fff; }
+    .btn-s { background: #e0e0e0; color: #555; }
+    .btn-o { background: transparent; border: 1px solid #3949ab; color: #3949ab; }
+    .btn-d { background: #ffebee; color: #c62828; border: none; }
+    .btn-sm { padding: 4px 12px; font-size: 11px; }
+    .btn-row { display: flex; gap: 8px; justify-content: center; padding: 8px 0; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    th { background: #f5f5f5; padding: 9px 12px; text-align: left; font-weight: 600; color: #555; border-bottom: 1px solid #e0e0e0; }
+    td { padding: 9px 12px; border-bottom: 1px solid #f0f0f0; color: #333; vertical-align: middle; }
+    tr:hover td { background: #fafafa; }
+
+    .bdg { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 10px; font-weight: 700; }
+    .bdg-oid { background: #e3f2fd; color: #1565c0; }
+    .bdg-did { background: #e8f5e9; color: #2e7d32; }
+    .bdg-on  { background: #e8f5e9; color: #2e7d32; }
+    .bdg-off { background: #ffebee; color: #c62828; }
+
+    .json-area {
+      width: 100%; min-height: 160px; padding: 10px 12px;
+      border: 1px solid #ddd; border-radius: 4px;
+      font-family: 'Courier New', monospace; font-size: 12px; color: #333;
+      line-height: 1.6; resize: vertical; background: #fafafa;
+    }
+    .json-area:focus { outline: none; border-color: #3949ab; background: #fff; }
+
+    .sec-label {
+      font-size: 11px; font-weight: 700; color: #1565c0;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      border-left: 3px solid #1565c0; padding-left: 8px;
+      margin: 16px 0 10px;
+    }
+
+    .cred-block {
+      border: 1px solid #e0e0e0; border-radius: 6px;
+      padding: 14px; margin-bottom: 10px; background: #fafafa;
+      position: relative;
+    }
+    .cred-block-title {
+      font-size: 12px; font-weight: 600; color: #3949ab;
+      margin-bottom: 10px; display: flex; align-items: center; gap: 6px;
+    }
+    .claim-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+    .claim-row .fi { flex: 1; padding: 5px 8px; font-size: 12px; }
+    .tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #e3f2fd; color: #1565c0; }
+
+    .config-preview { background: #1a1a2e; border-radius: 6px; padding: 14px; color: #a8d8a8; font-family: monospace; font-size: 12px; line-height: 1.8; overflow-x: auto; white-space: pre-wrap; }
+    .config-key { color: #90caf9; }
+    .config-str { color: #a8d8a8; }
+    .config-num { color: #ffcc80; }
+
+    .summary-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+    .summary-card { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
+    .summary-card .num { font-size: 28px; font-weight: 700; color: #3949ab; }
+    .summary-card .lbl { font-size: 12px; color: #888; margin-top: 2px; }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #333; color: #fff; padding: 10px 24px; border-radius: 8px;
+      font-size: 13px; z-index: 999; opacity: 0; transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; }
+
+    /* ── Modal overlay ── */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.4); z-index: 200; display: none;
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: #fff; border-radius: 10px; padding: 24px; min-width: 400px; max-width: 520px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2); max-height: 80vh; overflow-y: auto;
+    }
+    .modal-title { font-size: 15px; font-weight: 700; margin-bottom: 14px; color: #1a1a2e; }
+    .modal table td { cursor: pointer; }
+    .modal table tr:hover td { background: #e3f2fd; }
+  </style>
+</head>
+<body>
+
+<div class="toast" id="toast"></div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-title" id="modal-title"></div>
+    <div id="modal-body"></div>
+    <div class="btn-row" style="margin-top:12px;">
+      <button class="btn btn-s" onclick="closeModal()">닫기</button>
+    </div>
+  </div>
+</div>
+
+<div class="top-nav">
+  <span>SCREEN:</span>
+  <button class="snav active" onclick="go('nav')"    id="s-nav">① 메뉴 구조</button>
+  <button class="snav"        onclick="go('cfg')"    id="s-cfg">② OID4VP Config</button>
+  <button class="snav"        onclick="go('dcql')"   id="s-dcql">③ DCQL Scope Mapping 목록</button>
+  <button class="snav"        onclick="go('dcql-r')" id="s-dcql-r">④ DCQL Scope Mapping 등록</button>
+  <button class="snav"        onclick="go('pol')"    id="s-pol">⑤ OID4VP Policy 등록</button>
+</div>
+
+<!-- ═══════════════════════════════════
+     ① 메뉴 구조
+═══════════════════════════════════ -->
+<div class="screen visible" id="screen-nav">
+  <div style="width:100%; overflow-y:auto; padding:28px; display:flex; gap:28px; background:#eee; flex-wrap:wrap;">
+    <div>
+      <div style="font-size:11px; font-weight:700; color:#999; margin-bottom:8px;">AS-IS</div>
+      <div style="width:218px; background:#1a1a2e; border-radius:8px; overflow:hidden; font-size:12.5px;">
+        <div class="logo">Verifier Admin</div>
+        <div class="ndivider"></div>
+        <div class="ni parent"><span class="ico">🏢</span>Verifier Management</div>
+        <div class="ni parent"><span class="ico">⚙️</span>Service Configuration</div>
+        <div class="ndivider"></div>
+        <div class="ni parent"><span class="ico">📋</span>VP Policy Management</div>
+        <div class="ni child"><span class="dot"></span>Filter Management</div>
+        <div class="ni child"><span class="dot"></span>Process Management</div>
+        <div class="ni child"><span class="dot"></span>Profile Management</div>
+        <div class="ni child"><span class="dot"></span>Policy Management</div>
+        <div class="ndivider"></div>
+        <div class="ni parent"><span class="ico">🔒</span>ZKP Policy Management</div>
+        <div class="ni child"><span class="dot"></span>Proof Request Config</div>
+        <div class="ni child"><span class="dot"></span>ZKP Profile</div>
+        <div class="ni child"><span class="dot"></span>ZKP Policy</div>
+        <div class="ndivider"></div>
+        <div class="ni parent"><span class="ico">📊</span>VP History</div>
+        <div class="ni parent"><span class="ico">👤</span>Admin Management</div>
+        <div class="ndivider"></div>
+      </div>
+    </div>
+
+    <div style="display:flex; align-items:center; font-size:24px; color:#bbb; padding-top:50px;">→</div>
+
+    <div>
+      <div style="font-size:11px; font-weight:700; color:#1565c0; margin-bottom:8px;">TO-BE</div>
+      <div style="width:218px; background:#1a1a2e; border-radius:8px; overflow:hidden; font-size:12.5px;">
+        <div class="logo">Verifier Admin</div>
+        <div class="ndivider"></div>
+        <div class="ni parent"><span class="ico">🏢</span>Verifier Management</div>
+        <div class="ni parent"><span class="ico">⚙️</span>Service Configuration</div>
+        <div class="ndivider"></div>
+        <div class="ni parent"><span class="ico">📋</span>VP Policy Management</div>
+        <div class="ni child"><span class="dot"></span>Filter Management</div>
+        <div class="ni child"><span class="dot"></span>Process Management</div>
+        <div class="ni child"><span class="dot"></span>Profile Management</div>
+        <div class="ni child"><span class="dot"></span>Policy Management</div>
+        <div class="ndivider"></div>
+        <div class="ni parent" style="color:#90caf9;"><span class="ico">🌐</span>OID4VP Management <span class="nbadge">NEW</span></div>
+        <div class="ni child active" style="color:#fff;"><span class="dot" style="background:#7c8cf8"></span>OID4VP Config</div>
+        <div class="ni child" style="color:#90caf9;"><span class="dot" style="background:#90caf9"></span>DCQL Scope Mapping</div>
+        <div class="ni child" style="color:#90caf9;"><span class="dot" style="background:#90caf9"></span>OID4VP Policy</div>
+        <div class="ndivider"></div>
+        <div class="ni parent"><span class="ico">🔒</span>ZKP Policy Management</div>
+        <div class="ni child"><span class="dot"></span>Proof Request Config</div>
+        <div class="ni child"><span class="dot"></span>ZKP Profile</div>
+        <div class="ni child"><span class="dot"></span>ZKP Policy</div>
+        <div class="ndivider"></div>
+        <div class="ni parent"><span class="ico">📊</span>VP History</div>
+        <div class="ni parent"><span class="ico">👤</span>Admin Management</div>
+        <div class="ndivider"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     ② OID4VP Config
+═══════════════════════════════════ -->
+<div class="screen" id="screen-cfg">
+  <div class="sidebar">
+    <div class="logo">Verifier Admin</div>
+    <div class="ndivider"></div>
+    <div class="ni parent"><span class="ico">📋</span>VP Policy Management</div>
+    <div class="ni child"><span class="dot"></span>Policy Management</div>
+    <div class="ndivider"></div>
+    <div class="ni parent active"><span class="ico">🌐</span>OID4VP Management</div>
+    <div class="ni child active"><span class="dot"></span>OID4VP Config</div>
+    <div class="ni child" onclick="go('dcql')"><span class="dot"></span>DCQL Scope Mapping</div>
+    <div class="ni child" onclick="go('pol')"><span class="dot"></span>OID4VP Policy</div>
+    <div class="ndivider"></div>
+    <div class="ni parent"><span class="ico">🔒</span>ZKP Policy Management</div>
+  </div>
+  <div class="main">
+    <div class="topbar"><div class="bc">OID4VP Management &gt; <b>OID4VP Config</b></div></div>
+    <div class="content">
+      <div class="page-title">OID4VP Config</div>
+      <div class="page-sub">OID4VP 프로토콜 전역 설정을 관리합니다.</div>
+
+      <div class="card">
+        <div class="card-title">현재 설정 상태 <span class="bdg bdg-on" style="margin-left:auto;" id="cfg-status-badge">Configured</span></div>
+        <div class="summary-row">
+          <div class="summary-card"><div class="num" style="font-size:20px; word-break:break-all;" id="sum-baseUrl">https://verifier.example.com</div><div class="lbl">Base URL</div></div>
+          <div class="summary-card"><div class="num" style="font-size:20px;" id="sum-scheme">decentralized_identity</div><div class="lbl">Client ID Scheme</div></div>
+          <div class="summary-card"><div class="num" id="sum-ttl">300,000 ms</div><div class="lbl">Session TTL</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">설정 수정</div>
+
+        <div class="sec-label">기본 정보</div>
+        <div class="grid2">
+          <div class="fg">
+            <label class="req">Base URL</label>
+            <input class="fi" value="https://verifier.example.com" id="cfg-baseUrl" oninput="onCfgChange()" />
+            <div class="fi-hint">배포 환경의 서버 주소</div>
+          </div>
+          <div class="fg">
+            <label class="req">Client Name</label>
+            <div class="ibtn">
+              <input class="fi" value="OpenDID Verifier" id="cfg-clientName" oninput="onCfgChange()" />
+              <button class="btn btn-o btn-sm" onclick="showVerifierInfoModal('cfg')">Verifier 정보</button>
+            </div>
+            <div class="fi-hint">Wallet에 표시되는 Verifier 이름</div>
+          </div>
+        </div>
+
+        <div class="sec-label">Client ID 설정</div>
+        <div class="grid2">
+          <div class="fg">
+            <label class="req">Client ID Scheme</label>
+            <select class="fi" style="appearance:auto;" id="cfg-scheme" onchange="onSchemeChange()">
+              <option value="redirect_uri">redirect_uri</option>
+              <option value="decentralized_identity" selected>decentralized_identity</option>
+            </select>
+          </div>
+          <div class="fg" id="cfg-value-group">
+            <label class="req">Client ID Value</label>
+            <div id="cfg-value-auto" style="display:none; gap:8px; align-items:center;">
+              <input class="fi" value="https://verifier.example.com/oid4vp/response" id="cfg-value" oninput="onCfgValueManualChange()" />
+              <span style="font-size:11px; color:#1565c0; white-space:nowrap;">자동생성 (편집가능)</span>
+            </div>
+            <div id="cfg-value-did" style="display:block;">
+              <div class="ibtn">
+                <input class="fi" placeholder="Verifier DID 입력 또는 조회" id="cfg-value-did-input" oninput="onCfgValueManualChange()" />
+                <button class="btn btn-p btn-sm" onclick="showVerifierInfoModal('did')">DID 조회</button>
+              </div>
+            </div>
+            <div class="fi-hint" id="cfg-value-hint">Verifier DID를 조회하여 선택하거나 직접 입력 (프록시 환경 등)</div>
+          </div>
+        </div>
+
+        <div style="background:#f0f4ff; border:1px solid #c5cae9; border-radius:4px; padding:8px 12px; margin-bottom:14px; font-size:12px;">
+          <span style="color:#888;">client_id:</span>
+          <code style="color:#1565c0; font-weight:600;" id="cfg-clientid-preview">decentralized_identity:(DID 조회 필요)</code>
+        </div>
+
+        <div class="sec-label">세션 설정</div>
+        <div class="grid2">
+          <div class="fg">
+            <label>Session TTL (ms)</label>
+            <input class="fi" value="300000" id="cfg-ttl" oninput="onCfgChange()" />
+            <div class="fi-hint">세션 유효시간. 기본값: 300,000ms (5분)</div>
+          </div>
+          <div class="fg">
+            <label>Invocation Scheme</label>
+            <input class="fi" value="openid4vp://" id="cfg-invocation" oninput="onCfgChange()" />
+            <div class="fi-hint">Authorization Request URI 프로토콜. 기본값: openid4vp://</div>
+          </div>
+        </div>
+
+        <div class="sec-label">암호화 설정</div>
+        <div class="fg">
+          <label>VP Token Encryption Key (대칭키)</label>
+          <input class="fi ro" value="(application.yml에서 설정)" id="cfg-encryption-key" readonly />
+          <div class="fi-hint">VP Token 암호화에 사용되는 대칭키. application.yml의 <code>oid4vp.crypto.vpTokenEncryptionKey</code>에서 관리됩니다.</div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-p" onclick="saveCfg()">Save</button>
+          <button class="btn btn-s" onclick="resetCfg()">Reset</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">저장될 JSON</div>
+        <div class="config-preview" id="cfg-json-preview"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     ③ DCQL Scope Mapping 목록
+═══════════════════════════════════ -->
+<div class="screen" id="screen-dcql">
+  <div class="sidebar">
+    <div class="logo">Verifier Admin</div>
+    <div class="ndivider"></div>
+    <div class="ni parent active"><span class="ico">🌐</span>OID4VP Management</div>
+    <div class="ni child" onclick="go('cfg')"><span class="dot"></span>OID4VP Config</div>
+    <div class="ni child active"><span class="dot"></span>DCQL Scope Mapping</div>
+    <div class="ni child" onclick="go('pol')"><span class="dot"></span>OID4VP Policy</div>
+  </div>
+  <div class="main">
+    <div class="topbar"><div class="bc">OID4VP Management &gt; <b>DCQL Scope Mapping</b></div></div>
+    <div class="content">
+      <div class="page-title">DCQL Scope Mapping</div>
+      <div class="page-sub">scope와 DCQL Query를 매핑합니다.</div>
+
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <div class="card-title" style="margin:0;">Scope Mapping 목록</div>
+          <button class="btn btn-p btn-sm" onclick="go('dcql-r')">+ 등록</button>
+        </div>
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Scope</th><th>Description</th><th>Credential 수</th><th>Enabled</th><th>수정일</th><th></th></tr>
+          </thead>
+          <tbody id="dcql-table-body">
+            <tr>
+              <td style="color:#999;">1</td>
+              <td><span class="tag">id_card_verification</span></td>
+              <td>국가신분증 이름/생년월일 확인</td>
+              <td>1</td>
+              <td><span class="bdg bdg-on">Enabled</span></td>
+              <td style="color:#999; font-size:12px;">2026-03-10</td>
+              <td><button class="btn btn-o btn-sm" onclick="showScopeDetail('id_card_verification')">상세</button></td>
+            </tr>
+            <tr>
+              <td style="color:#999;">2</td>
+              <td><span class="tag">employment_verification</span></td>
+              <td>재직증명서 확인</td>
+              <td>1</td>
+              <td><span class="bdg bdg-on">Enabled</span></td>
+              <td style="color:#999; font-size:12px;">2026-03-08</td>
+              <td><button class="btn btn-o btn-sm" onclick="showScopeDetail('employment_verification')">상세</button></td>
+            </tr>
+            <tr>
+              <td style="color:#999;">3</td>
+              <td><span class="tag">age_verification</span></td>
+              <td>연령 확인 (18세 이상)</td>
+              <td>1</td>
+              <td><span class="bdg bdg-off">Disabled</span></td>
+              <td style="color:#999; font-size:12px;">2026-03-05</td>
+              <td><button class="btn btn-o btn-sm" onclick="showScopeDetail('age_verification')">상세</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     ④ DCQL Scope Mapping 등록
+═══════════════════════════════════ -->
+<div class="screen" id="screen-dcql-r">
+  <div class="sidebar">
+    <div class="logo">Verifier Admin</div>
+    <div class="ndivider"></div>
+    <div class="ni parent active"><span class="ico">🌐</span>OID4VP Management</div>
+    <div class="ni child" onclick="go('cfg')"><span class="dot"></span>OID4VP Config</div>
+    <div class="ni child active"><span class="dot"></span>DCQL Scope Mapping</div>
+    <div class="ni child" onclick="go('pol')"><span class="dot"></span>OID4VP Policy</div>
+  </div>
+  <div class="main">
+    <div class="topbar"><div class="bc">OID4VP Management &gt; DCQL Scope Mapping &gt; <b>등록</b></div></div>
+    <div class="content">
+      <div class="page-title">DCQL Scope Mapping 등록</div>
+
+      <!-- 기본 정보 -->
+      <div class="card">
+        <div class="card-title">기본 정보</div>
+        <div class="grid2">
+          <div class="fg">
+            <label class="req">Scope</label>
+            <input class="fi" placeholder="예: id_card_verification" id="dcql-scope" oninput="updateDcqlPreview()" />
+            <div class="fi-hint">고유 scope 식별자</div>
+          </div>
+          <div class="fg">
+            <label>Description</label>
+            <input class="fi" placeholder="예: 국가신분증 이름/생년월일 확인" id="dcql-desc" />
+          </div>
+        </div>
+        <div class="fg">
+          <label>Enabled</label>
+          <select class="fi" style="width:160px; appearance:auto;" id="dcql-enabled">
+            <option value="true" selected>true</option>
+            <option value="false">false</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- DCQL Query 빌더 -->
+      <div class="card">
+        <div class="card-title"><span class="bdg bdg-oid">DCQL</span> DCQLQuery 설정</div>
+
+        <div id="cred-queries-container">
+          <!-- CredentialQuery #1 -->
+          <div class="cred-block" data-cred-idx="0">
+            <div class="cred-block-title">
+              <span class="bdg bdg-oid">CredentialQuery</span>
+            </div>
+            <div class="grid2" style="margin-bottom:10px;">
+              <div class="fg" style="margin:0;">
+                <label class="req">Credential ID</label>
+                <input class="fi cred-id" placeholder="예: id_card" oninput="updateDcqlPreview()" />
+              </div>
+              <div class="fg" style="margin:0;">
+                <label class="req">Format</label>
+                <select class="fi cred-format" style="appearance:auto;" onchange="onFormatChange(this); updateDcqlPreview()">
+                  <option value="dc+sd-jwt" selected>dc+sd-jwt</option>
+                  <option value="vc+sd-jwt">vc+sd-jwt</option>
+                  <option value="opendid_vc">opendid_vc</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Meta -->
+            <div class="fg" style="margin-bottom:10px;">
+              <label>Meta</label>
+              <div class="meta-area">
+                <div class="grid2">
+                  <div class="fg" style="margin:0;">
+                    <label style="font-size:10px; color:#1565c0;">Meta Key</label>
+                    <input class="fi meta-key ro" value="vct_values" readonly style="font-size:12px;" />
+                    <div class="fi-hint meta-key-hint">dc+sd-jwt / vc+sd-jwt: VCT 값 목록</div>
+                  </div>
+                  <div class="fg" style="margin:0;">
+                    <label style="font-size:10px; color:#1565c0;">Values (배열)</label>
+                    <div class="meta-values-area">
+                      <div class="ibtn">
+                        <input class="fi meta-values" placeholder='예: ["NationalIdCredential"]' oninput="updateDcqlPreview()" style="font-size:12px;" />
+                        <button class="btn btn-p btn-sm meta-tas-btn" style="display:none;" onclick="showTasLookupModal(this)">TAS 조회</button>
+                      </div>
+                    </div>
+                    <div class="fi-hint meta-values-hint">JSON 배열 형식으로 입력. 예: ["value1", "value2"]</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Claims -->
+            <div class="claims-section">
+              <div style="font-size:11px; font-weight:600; color:#555; margin-bottom:6px;">Claims <span style="font-size:10px; color:#999; font-weight:400;">(선택)</span></div>
+              <div style="display:grid; grid-template-columns:120px 1fr 1fr 32px; gap:6px; margin-bottom:4px; font-size:10px; color:#999;">
+                <span>ID</span><span>Path (JSON 배열)</span><span>Values (선택)</span><span></span>
+              </div>
+              <div class="claims-container">
+                <!-- claims는 비어있음 — "+ Claim 추가" 버튼으로 수동 추가 -->
+              </div>
+              <button class="btn btn-o btn-sm" style="margin-top:4px;" onclick="addClaim(this)">+ Claim 추가</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- JSON 미리보기 -->
+        <div class="sec-label">저장될 DCQLQuery JSON</div>
+        <div class="config-preview" id="dcql-json-preview"></div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-p" onclick="registerDcql()">Register</button>
+        <button class="btn btn-s" onclick="resetDcql()">Reset</button>
+        <button class="btn btn-s" onclick="go('dcql')">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     ⑤ OID4VP Policy 등록
+═══════════════════════════════════ -->
+<div class="screen" id="screen-pol">
+  <div style="width:100%; overflow-y:auto; padding:24px; display:flex; gap:24px; background:#eee;">
+    <div style="flex:1; min-width:340px;">
+      <div style="font-size:11px; font-weight:700; color:#2e7d32; margin-bottom:8px; text-transform:uppercase;">DID VP Policy 등록 (기존)</div>
+      <div style="background:#fff; border-radius:8px; padding:20px; box-shadow:0 2px 8px rgba(0,0,0,0.07);">
+        <div style="font-size:15px; font-weight:700; margin-bottom:4px;">Policy Registration <span class="bdg bdg-did">DID VP</span></div>
+        <div style="font-size:12px; color:#888; margin-bottom:16px;">Filter → Process → Profile → Policy</div>
+        <div class="fg"><label class="req">Policy Title</label><input class="fi" placeholder="Policy 이름" /></div>
+        <div style="font-size:12px; font-weight:600; color:#555; margin:10px 0 6px;">Profile</div>
+        <div class="ibtn"><input class="fi ro" placeholder="Profile 선택" /><button class="btn btn-p btn-sm">Search</button></div>
+        <div style="font-size:12px; font-weight:600; color:#555; margin:10px 0 6px;">Payload (Service)</div>
+        <div class="ibtn"><input class="fi ro" placeholder="Payload 선택" /><button class="btn btn-p btn-sm">Search</button></div>
+        <div class="btn-row" style="margin-top:16px;"><button class="btn btn-p">Register</button><button class="btn btn-s">Cancel</button></div>
+      </div>
+    </div>
+
+    <div style="display:flex; align-items:center; font-size:20px; color:#bbb; padding-top:60px;">vs</div>
+
+    <div style="flex:1; min-width:340px;">
+      <div style="font-size:11px; font-weight:700; color:#1565c0; margin-bottom:8px; text-transform:uppercase;">OID4VP Policy 등록 (신규)</div>
+      <div style="background:#fff; border-radius:8px; padding:20px; box-shadow:0 2px 8px rgba(0,0,0,0.07);">
+        <div style="font-size:15px; font-weight:700; margin-bottom:4px;">OID4VP Policy Registration <span class="bdg bdg-oid">OID4VP</span></div>
+        <div style="font-size:12px; color:#888; margin-bottom:16px;">DCQL Scope Mapping → Policy</div>
+        <div class="fg"><label class="req">Policy Title</label><input class="fi" placeholder="Policy 이름" id="pol-title" /></div>
+        <div style="font-size:12px; font-weight:600; color:#1565c0; margin:10px 0 6px;">DCQL Scope Mapping</div>
+        <div class="ibtn">
+          <input class="fi ro" placeholder="Scope 선택" id="pol-scope" readonly />
+          <button class="btn btn-p btn-sm" onclick="showScopeSelectModal()">Search</button>
+        </div>
+        <div class="btn-row" style="margin-top:16px;">
+          <button class="btn btn-p" onclick="registerPolicy()">Register</button>
+          <button class="btn btn-s">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══ 샘플 데이터 ═══
+var sampleScopes = [
+  { id:1, scope:'id_card_verification', desc:'국가신분증 이름/생년월일 확인', credCount:1, enabled:true, date:'2026-03-10',
+    dcql: { credentials:[{ id:'id_card', format:'dc+sd-jwt', meta:{vct_values:['NationalIdCredential']}, claims:[{id:'name_claim',path:['name']},{id:'birth_claim',path:['birthDate']}] }] }
+  },
+  { id:2, scope:'employment_verification', desc:'재직증명서 확인', credCount:1, enabled:true, date:'2026-03-08',
+    dcql: { credentials:[{ id:'employment', format:'dc+sd-jwt', meta:{vct_values:['EmploymentCredential']}, claims:[{id:'company',path:['company']},{id:'position',path:['position']}] }] }
+  },
+  { id:3, scope:'age_verification', desc:'연령 확인 (18세 이상)', credCount:1, enabled:false, date:'2026-03-05',
+    dcql: { credentials:[{ id:'age_check', format:'dc+sd-jwt', meta:{vct_values:['AgeCredential']}, claims:[{id:'age',path:['age']}] }] }
+  }
+];
+
+// ═══ 공통 ═══
+function go(id) {
+  document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('visible'); });
+  document.querySelectorAll('.snav').forEach(function(b){ b.classList.remove('active'); });
+  document.getElementById('screen-' + id).classList.add('visible');
+  document.getElementById('s-' + id).classList.add('active');
+  if (id === 'cfg') updateCfgJsonPreview();
+  if (id === 'dcql-r') updateDcqlPreview();
+}
+
+function toast(msg) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(function(){ el.classList.remove('show'); }, 2000);
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('show');
+}
+
+function showModal(title, bodyHtml) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = bodyHtml;
+  document.getElementById('modal').classList.add('show');
+}
+
+// ═══ ② Config ═══
+function onSchemeChange() {
+  var scheme = document.getElementById('cfg-scheme').value;
+  var baseUrl = document.getElementById('cfg-baseUrl').value || 'https://verifier.example.com';
+  document.getElementById('cfg-value-auto').style.display = 'none';
+  document.getElementById('cfg-value-did').style.display = 'none';
+
+  if (scheme === 'redirect_uri') {
+    document.getElementById('cfg-value-auto').style.display = 'flex';
+    var val = baseUrl + '/oid4vp/response';
+    document.getElementById('cfg-value').value = val;
+    document.getElementById('cfg-value-hint').textContent = 'Base URL + /oid4vp/response 로 자동 구성 (편집 가능 — 프록시 환경 등)';
+    document.getElementById('cfg-clientid-preview').textContent = 'redirect_uri:' + val;
+  } else {
+    document.getElementById('cfg-value-did').style.display = 'block';
+    document.getElementById('cfg-value-hint').textContent = 'Verifier DID를 조회하여 선택하거나 직접 입력 (프록시 환경 등)';
+    var didVal = document.getElementById('cfg-value-did-input').value || '(DID 조회 필요)';
+    document.getElementById('cfg-clientid-preview').textContent = scheme + ':' + didVal;
+  }
+  updateCfgJsonPreview();
+}
+
+function onCfgChange() {
+  var scheme = document.getElementById('cfg-scheme').value;
+  if (scheme === 'redirect_uri') {
+    var baseUrl = document.getElementById('cfg-baseUrl').value;
+    var val = baseUrl + '/oid4vp/response';
+    document.getElementById('cfg-value').value = val;
+    document.getElementById('cfg-clientid-preview').textContent = 'redirect_uri:' + val;
+  }
+  updateCfgJsonPreview();
+}
+
+function onCfgValueManualChange() {
+  var scheme = document.getElementById('cfg-scheme').value;
+  if (scheme === 'redirect_uri') {
+    var val = document.getElementById('cfg-value').value;
+    document.getElementById('cfg-clientid-preview').textContent = 'redirect_uri:' + val;
+  } else {
+    var didVal = document.getElementById('cfg-value-did-input').value || '(DID 조회 필요)';
+    document.getElementById('cfg-clientid-preview').textContent = scheme + ':' + didVal;
+  }
+  updateCfgJsonPreview();
+}
+
+function showVerifierInfoModal(mode) {
+  var html = '<table><thead><tr><th>Name</th><th>DID</th><th>Status</th></tr></thead><tbody>';
+  html += '<tr onclick="selectVerifier(\'OpenDID Verifier\',\'did:omn:verifier\',\'' + mode + '\')"><td>OpenDID Verifier</td><td style="font-size:11px;color:#888;">did:omn:verifier</td><td><span class="bdg bdg-on">ACTIVE</span></td></tr>';
+  html += '<tr onclick="selectVerifier(\'Test Verifier\',\'did:omn:test-verifier\',\'' + mode + '\')"><td>Test Verifier</td><td style="font-size:11px;color:#888;">did:omn:test-verifier</td><td><span class="bdg bdg-on">ACTIVE</span></td></tr>';
+  html += '</tbody></table>';
+  showModal('Verifier 정보 조회', html);
+}
+
+function selectVerifier(name, did, mode) {
+  if (mode === 'cfg') {
+    document.getElementById('cfg-clientName').value = name;
+  } else if (mode === 'did') {
+    document.getElementById('cfg-value-did-input').value = did;
+    var scheme = document.getElementById('cfg-scheme').value;
+    document.getElementById('cfg-clientid-preview').textContent = scheme + ':' + did;
+  }
+  closeModal();
+  updateCfgJsonPreview();
+  toast(mode === 'cfg' ? 'Client Name 적용: ' + name : 'DID 적용: ' + did);
+}
+
+function buildCfgJson() {
+  var scheme = document.getElementById('cfg-scheme').value;
+  var value = scheme === 'redirect_uri'
+    ? document.getElementById('cfg-value').value
+    : document.getElementById('cfg-value-did-input').value || '';
+  return {
+    baseUrl: document.getElementById('cfg-baseUrl').value,
+    clientName: document.getElementById('cfg-clientName').value,
+    invocationScheme: document.getElementById('cfg-invocation').value,
+    clientId: { scheme: scheme, value: value },
+    session: { sessionTtl: parseInt(document.getElementById('cfg-ttl').value) || 300000 },
+    endpoints: { response: '/oid4vp/response', request: '/oid4vp/request' },
+    clientMetadata: { vpFormatsSupported: { 'dc+sd-jwt': {}, 'opendid_vc': {} } },
+    crypto: { vpTokenEncryptionKey: null }
+  };
+}
+
+function updateCfgJsonPreview() {
+  var json = JSON.stringify(buildCfgJson(), null, 2);
+  document.getElementById('cfg-json-preview').textContent = json;
+}
+
+function saveCfg() {
+  var cfg = buildCfgJson();
+  if (!cfg.baseUrl) { toast('Base URL을 입력하세요.'); return; }
+  if (!cfg.clientName) { toast('Client Name을 입력하세요.'); return; }
+  if (!cfg.clientId.value) { toast('Client ID Value를 설정하세요.'); return; }
+  document.getElementById('sum-baseUrl').textContent = cfg.baseUrl;
+  document.getElementById('sum-scheme').textContent = cfg.clientId.scheme;
+  document.getElementById('sum-ttl').textContent = Number(cfg.session.sessionTtl).toLocaleString() + ' ms';
+  toast('Config 저장 완료');
+}
+
+function resetCfg() {
+  document.getElementById('cfg-baseUrl').value = 'https://verifier.example.com';
+  document.getElementById('cfg-clientName').value = 'OpenDID Verifier';
+  document.getElementById('cfg-scheme').value = 'decentralized_identity';
+  document.getElementById('cfg-ttl').value = '300000';
+  document.getElementById('cfg-invocation').value = 'openid4vp://';
+  document.getElementById('cfg-value-did-input').value = '';
+  onSchemeChange();
+  toast('초기값으로 복원');
+}
+
+// ═══ ③ Scope 목록 상세 ═══
+function showScopeDetail(scope) {
+  var item = sampleScopes.find(function(s){ return s.scope === scope; });
+  if (!item) return;
+  var html = '<div style="margin-bottom:10px;"><b>Scope:</b> <span class="tag">' + item.scope + '</span></div>';
+  html += '<div style="margin-bottom:10px;"><b>Description:</b> ' + item.desc + '</div>';
+  html += '<div style="margin-bottom:10px;"><b>Enabled:</b> ' + (item.enabled ? '<span class="bdg bdg-on">Enabled</span>' : '<span class="bdg bdg-off">Disabled</span>') + '</div>';
+  html += '<div style="font-weight:600; margin-bottom:6px;">DCQLQuery JSON:</div>';
+  html += '<div class="config-preview" style="font-size:11px; line-height:1.6;">' + JSON.stringify(item.dcql, null, 2) + '</div>';
+  showModal('Scope Mapping 상세 — ' + scope, html);
+}
+
+// ═══ TAS 조회 (opendid_vc용) ═══
+function showTasLookupModal(btn) {
+  var block = btn.closest('.cred-block');
+  var html = '<div style="font-size:12px; color:#888; margin-bottom:10px;">TAS(Trust Anchor Service)에서 등록된 Credential Schema를 조회합니다.</div>';
+  html += '<table><thead><tr><th>Schema ID</th><th>Name</th><th>Version</th></tr></thead><tbody>';
+  // 샘플 TAS 데이터
+  html += '<tr onclick="selectTasSchema(\'org.opendid.v1.national-id\',this)"><td style="font-size:11px;">org.opendid.v1.national-id</td><td>국가신분증</td><td>1.0</td></tr>';
+  html += '<tr onclick="selectTasSchema(\'org.opendid.v1.driver-license\',this)"><td style="font-size:11px;">org.opendid.v1.driver-license</td><td>운전면허증</td><td>1.0</td></tr>';
+  html += '<tr onclick="selectTasSchema(\'org.opendid.v1.employee-cert\',this)"><td style="font-size:11px;">org.opendid.v1.employee-cert</td><td>재직증명서</td><td>1.0</td></tr>';
+  html += '</tbody></table>';
+  // 선택된 block을 임시 저장
+  window._tasTargetBlock = block;
+  showModal('TAS Credential Schema 조회', html);
+}
+
+function selectTasSchema(schemaId) {
+  var block = window._tasTargetBlock;
+  if (block) {
+    var metaInput = block.querySelector('.meta-values');
+    var current = metaInput.value.trim();
+    var arr = [];
+    if (current) {
+      try { arr = JSON.parse(current); } catch(e) { arr = []; }
+    }
+    if (arr.indexOf(schemaId) === -1) arr.push(schemaId);
+    metaInput.value = JSON.stringify(arr);
+    updateDcqlPreview();
+  }
+  closeModal();
+  toast('Schema 선택: ' + schemaId);
+}
+
+// ═══ ④ DCQL 등록 ═══
+var credQueryCounter = 1;
+
+function onFormatChange(selectEl) {
+  var block = selectEl.closest('.cred-block');
+  var format = selectEl.value;
+  var metaKey = block.querySelector('.meta-key');
+  var metaHint = block.querySelector('.meta-key-hint');
+  var claimsSection = block.querySelector('.claims-section');
+  var tasBtn = block.querySelector('.meta-tas-btn');
+  var metaValuesHint = block.querySelector('.meta-values-hint');
+
+  if (format === 'opendid_vc') {
+    metaKey.value = 'credential_schema_id_values';
+    metaHint.textContent = 'opendid_vc: Credential Schema ID 목록';
+    // opendid_vc는 전체 credential 제출 → claims 비활성화
+    if (claimsSection) claimsSection.style.display = 'none';
+    // TAS 조회 버튼 표시
+    if (tasBtn) tasBtn.style.display = 'inline-block';
+    if (metaValuesHint) metaValuesHint.textContent = 'TAS에서 Credential Schema ID를 조회하여 선택합니다.';
+  } else {
+    metaKey.value = 'vct_values';
+    metaHint.textContent = 'dc+sd-jwt / vc+sd-jwt: VCT 값 목록';
+    // claims 표시
+    if (claimsSection) claimsSection.style.display = 'block';
+    // TAS 조회 버튼 숨김
+    if (tasBtn) tasBtn.style.display = 'none';
+    if (metaValuesHint) metaValuesHint.textContent = 'JSON 배열 형식으로 입력. 예: ["value1", "value2"]';
+  }
+  // format 변경 시 claims 비우기
+  var claimsContainer = block.querySelector('.claims-container');
+  if (claimsContainer) claimsContainer.innerHTML = '';
+}
+
+function addClaim(btn) {
+  var container = btn.previousElementSibling;
+  if (!container || !container.classList.contains('claims-container')) {
+    container = btn.parentElement.querySelector('.claims-container');
+  }
+  var row = document.createElement('div');
+  row.className = 'claim-row';
+  row.innerHTML =
+    '<input class="fi claim-id" style="max-width:120px;" placeholder="claim id" oninput="updateDcqlPreview()" />' +
+    '<input class="fi claim-path" placeholder=\'["field"]\' oninput="updateDcqlPreview()" />' +
+    '<input class="fi claim-values" placeholder=\'["val1","val2"] (선택)\' oninput="updateDcqlPreview()" />' +
+    '<button class="btn btn-d btn-sm" onclick="removeClaim(this)">✕</button>';
+  container.appendChild(row);
+  updateDcqlPreview();
+}
+
+function removeClaim(btn) {
+  var row = btn.parentElement;
+  row.remove();
+  updateDcqlPreview();
+}
+
+// addCredQuery, removeCredQuery 제거 — 단일 CredentialQuery만 허용
+
+function buildDcqlJson() {
+  var credentials = [];
+  document.querySelectorAll('#cred-queries-container .cred-block').forEach(function(block) {
+    var cred = {};
+    var id = block.querySelector('.cred-id').value.trim();
+    var format = block.querySelector('.cred-format').value;
+    if (id) cred.id = id;
+    cred.format = format;
+
+    // meta — JSON 배열 형식
+    var metaKey = block.querySelector('.meta-key').value;
+    var metaValsStr = block.querySelector('.meta-values').value.trim();
+    if (metaValsStr) {
+      cred.meta = {};
+      try {
+        cred.meta[metaKey] = JSON.parse(metaValsStr);
+      } catch(e) {
+        // JSON 파싱 실패 시 단일 값으로 배열 생성
+        cred.meta[metaKey] = [metaValsStr];
+      }
+    }
+
+    // claims (opendid_vc에서는 claims 없음)
+    if (format !== 'opendid_vc') {
+      var claims = [];
+      block.querySelectorAll('.claim-row').forEach(function(row) {
+        var c = {};
+        var cid = row.querySelector('.claim-id').value.trim();
+        var pathStr = row.querySelector('.claim-path').value.trim();
+        if (cid) c.id = cid;
+        if (pathStr) {
+          try { c.path = JSON.parse(pathStr); } catch(e) { c.path = [pathStr]; }
+        }
+        var vals = row.querySelector('.claim-values').value.trim();
+        if (vals) {
+          try { c.values = JSON.parse(vals); } catch(e) { c.values = [vals]; }
+        }
+        if (c.path) claims.push(c);
+      });
+      if (claims.length) cred.claims = claims;
+    }
+    credentials.push(cred);
+  });
+  return { credentials: credentials };
+}
+
+function updateDcqlPreview() {
+  var json = buildDcqlJson();
+  var el = document.getElementById('dcql-json-preview');
+  if (el) el.textContent = JSON.stringify(json, null, 2);
+}
+
+function registerDcql() {
+  var scope = document.getElementById('dcql-scope').value.trim();
+  if (!scope) { toast('Scope를 입력하세요.'); return; }
+  var dcql = buildDcqlJson();
+
+  // 샘플 목록에 추가
+  var newId = sampleScopes.length + 1;
+  sampleScopes.push({
+    id: newId, scope: scope,
+    desc: document.getElementById('dcql-desc').value || '',
+    credCount: dcql.credentials.length,
+    enabled: document.getElementById('dcql-enabled').value === 'true',
+    date: new Date().toISOString().slice(0,10),
+    dcql: dcql
+  });
+
+  // 테이블에 행 추가
+  var tbody = document.getElementById('dcql-table-body');
+  var en = document.getElementById('dcql-enabled').value === 'true';
+  var tr = document.createElement('tr');
+  tr.innerHTML =
+    '<td style="color:#999;">' + newId + '</td>' +
+    '<td><span class="tag">' + scope + '</span></td>' +
+    '<td>' + (document.getElementById('dcql-desc').value || '-') + '</td>' +
+    '<td>' + dcql.credentials.length + '</td>' +
+    '<td><span class="bdg ' + (en ? 'bdg-on">Enabled' : 'bdg-off">Disabled') + '</span></td>' +
+    '<td style="color:#999; font-size:12px;">' + new Date().toISOString().slice(0,10) + '</td>' +
+    '<td><button class="btn btn-o btn-sm" onclick="showScopeDetail(\'' + scope + '\')">상세</button></td>';
+  tbody.appendChild(tr);
+
+  toast('Scope Mapping 등록 완료: ' + scope);
+  go('dcql');
+}
+
+function resetDcql() {
+  document.getElementById('dcql-scope').value = '';
+  document.getElementById('dcql-desc').value = '';
+  document.getElementById('dcql-enabled').value = 'true';
+  var first = document.querySelector('#cred-queries-container .cred-block');
+  first.querySelector('.cred-id').value = '';
+  first.querySelector('.cred-format').value = 'dc+sd-jwt';
+  first.querySelector('.meta-values').value = '';
+  onFormatChange(first.querySelector('.cred-format'));
+  var claims = first.querySelector('.claims-container');
+  claims.innerHTML = '';
+  updateDcqlPreview();
+  toast('폼 초기화');
+}
+
+// ═══ ⑤ Policy ═══
+function showScopeSelectModal() {
+  var html = '<table><thead><tr><th>Scope</th><th>Description</th><th>Status</th></tr></thead><tbody>';
+  sampleScopes.forEach(function(s) {
+    if (!s.enabled) return;
+    html += '<tr onclick="selectScope(\'' + s.scope + '\')"><td><span class="tag">' + s.scope + '</span></td><td>' + s.desc + '</td><td><span class="bdg bdg-on">Enabled</span></td></tr>';
+  });
+  html += '</tbody></table>';
+  if (!sampleScopes.some(function(s){ return s.enabled; })) {
+    html = '<div style="text-align:center; color:#888; padding:20px;">활성화된 Scope Mapping이 없습니다.</div>';
+  }
+  showModal('DCQL Scope Mapping 선택', html);
+}
+
+function selectScope(scope) {
+  document.getElementById('pol-scope').value = scope;
+  closeModal();
+  toast('Scope 선택: ' + scope);
+}
+
+function registerPolicy() {
+  var title = document.getElementById('pol-title').value.trim();
+  var scope = document.getElementById('pol-scope').value.trim();
+  if (!title) { toast('Policy Title을 입력하세요.'); return; }
+  if (!scope) { toast('DCQL Scope Mapping을 선택하세요.'); return; }
+  toast('OID4VP Policy 등록 완료: ' + title + ' (scope: ' + scope + ')');
+}
+
+// ═══ 초기화 ═══
+updateCfgJsonPreview();
+</script>
+</body>
+</html>

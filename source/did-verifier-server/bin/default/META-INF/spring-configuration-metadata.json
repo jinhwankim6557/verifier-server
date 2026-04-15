@@ -1,0 +1,105 @@
+{
+  "groups": [
+    {
+      "name": "blockchain",
+      "type": "org.omnione.did.base.property.BlockchainProperty",
+      "sourceType": "org.omnione.did.base.property.BlockchainProperty"
+    },
+    {
+      "name": "e2e",
+      "type": "org.omnione.did.verifier.v1.agent.config.E2eProperty",
+      "sourceType": "org.omnione.did.verifier.v1.agent.config.E2eProperty"
+    },
+    {
+      "name": "lss",
+      "type": "org.omnione.did.base.property.LSSProperty",
+      "sourceType": "org.omnione.did.base.property.LSSProperty"
+    },
+    {
+      "name": "verifier",
+      "type": "org.omnione.did.base.property.VerifierProperty",
+      "sourceType": "org.omnione.did.base.property.VerifierProperty"
+    },
+    {
+      "name": "wallet",
+      "type": "org.omnione.did.base.property.WalletProperty",
+      "sourceType": "org.omnione.did.base.property.WalletProperty"
+    }
+  ],
+  "properties": [
+    {
+      "name": "blockchain.file-path",
+      "type": "java.lang.String",
+      "sourceType": "org.omnione.did.base.property.BlockchainProperty"
+    },
+    {
+      "name": "e2e.cipher",
+      "type": "java.lang.String",
+      "description": "대칭키 암호화 알고리즘 기본값: AES-256-CBC",
+      "sourceType": "org.omnione.did.verifier.v1.agent.config.E2eProperty"
+    },
+    {
+      "name": "e2e.curve",
+      "type": "java.lang.String",
+      "description": "ECC Curve Type 기본값: Secp256r1",
+      "sourceType": "org.omnione.did.verifier.v1.agent.config.E2eProperty"
+    },
+    {
+      "name": "e2e.padding",
+      "type": "java.lang.String",
+      "description": "패딩 방식 기본값: PKCS5",
+      "sourceType": "org.omnione.did.verifier.v1.agent.config.E2eProperty"
+    },
+    {
+      "name": "lss.url",
+      "type": "java.lang.String",
+      "sourceType": "org.omnione.did.base.property.LSSProperty"
+    },
+    {
+      "name": "verifier.cert-vc-ref",
+      "type": "java.lang.String",
+      "sourceType": "org.omnione.did.base.property.VerifierProperty"
+    },
+    {
+      "name": "verifier.did",
+      "type": "java.lang.String",
+      "sourceType": "org.omnione.did.base.property.VerifierProperty"
+    },
+    {
+      "name": "verifier.domain",
+      "type": "java.lang.String",
+      "sourceType": "org.omnione.did.base.property.VerifierProperty"
+    },
+    {
+      "name": "verifier.name",
+      "type": "java.lang.String",
+      "sourceType": "org.omnione.did.base.property.VerifierProperty"
+    },
+    {
+      "name": "verifier.ref",
+      "type": "java.lang.String",
+      "sourceType": "org.omnione.did.base.property.VerifierProperty"
+    },
+    {
+      "name": "verifier.tas-url",
+      "type": "java.lang.String",
+      "sourceType": "org.omnione.did.base.property.VerifierProperty"
+    },
+    {
+      "name": "verifier.verifier-end-points",
+      "type": "java.util.ArrayList<java.lang.String>",
+      "sourceType": "org.omnione.did.base.property.VerifierProperty"
+    },
+    {
+      "name": "wallet.file-path",
+      "type": "java.lang.String",
+      "sourceType": "org.omnione.did.base.property.WalletProperty"
+    },
+    {
+      "name": "wallet.password",
+      "type": "java.lang.String",
+      "sourceType": "org.omnione.did.base.property.WalletProperty"
+    }
+  ],
+  "hints": []
+}

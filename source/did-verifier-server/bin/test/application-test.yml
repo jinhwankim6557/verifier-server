@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: did-verifier-server-test
+
+  liquibase:
+    enabled: false
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.H2Dialect
+        hbm2ddl:
+          auto: create-drop
+
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=false;NON_KEYWORDS=VALUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  h2:
+    console:
+      enabled: true
+
+logging:
+  level:
+    root: WARN
+    org.omnione.did: DEBUG
+
+# Verifier 설정
+verifier:
+  did: did:example:verifier-test-001
+  name: Test Verifier
+  certVcRef: cert-vc-001
+  ref: https://example.com/test
+
+# 서버 포트
+server:
+  port: 8092
