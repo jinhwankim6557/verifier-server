@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
+import org.omnione.did.oid4vc.dcql.core.credential.impl.MDocCredentialAdapter;
 import org.omnione.did.oid4vc.dcql.core.credential.impl.OpenDIDVCCredentialAdapter;
 import org.omnione.did.oid4vc.dcql.core.credential.impl.SDJWTCredentialAdapter;
 
@@ -41,6 +42,7 @@ public class CredentialAdapterRegistry {
         // Register default adapters
         registerAdapter(new SDJWTCredentialAdapter());
         registerAdapter(new OpenDIDVCCredentialAdapter());
+        registerAdapter(new MDocCredentialAdapter());
         log.info("CredentialAdapterRegistry initialized with {} adapters", adapters.size());
     }
 

@@ -22,7 +22,7 @@ package org.omnione.did.oid4vc.oid4vp.exception;
 public enum OID4VPErrorCode implements OID4VPErrorCodeInterface {
 
     // Base
-    ERR_CODE_OID4VP_BASE("SSOID4VP", ""),
+    ERR_CODE_OID4VP_BASE("SSDKOVP", ""),
 
     // Authorization (01)
     ERR_CODE_AUTH_BASE(ERR_CODE_OID4VP_BASE, "01", ""),
@@ -55,6 +55,9 @@ public enum OID4VPErrorCode implements OID4VPErrorCodeInterface {
     ERR_CODE_VP_FORMAT_MISMATCH(ERR_CODE_VP_BASE, "008", "Credential format mismatch"),
     ERR_CODE_VP_CREDENTIAL_COUNT_MISMATCH(ERR_CODE_VP_BASE, "009", "Credential count mismatch"),
     ERR_CODE_VP_META_MISMATCH(ERR_CODE_VP_BASE, "010", "Credential meta condition not satisfied"),
+    ERR_CODE_VP_CREDENTIAL_SET_NOT_SATISFIED(ERR_CODE_VP_BASE, "011", "Credential set requirements not satisfied"),
+    ERR_CODE_VP_TRUSTED_AUTHORITY_MISMATCH(ERR_CODE_VP_BASE, "012", "Credential issuer not in trusted authorities"),
+    ERR_CODE_VP_CLAIM_MISMATCH(ERR_CODE_VP_BASE, "013", "Credential claim constraint not satisfied"),
 
     // JWS/JWT (04)
     ERR_CODE_JWS_BASE(ERR_CODE_OID4VP_BASE, "04", ""),

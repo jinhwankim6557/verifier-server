@@ -21,6 +21,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const allScreens = [screenMetadataView, screenMetadataEdit, screenConfigList, screenRegister, screenProperty];
     const allHelps = [helpMetadata, helpMetadataEdit, helpConfig, helpRegister, helpProperty];
 
+    function runWithLoading(btn, afterFn) {
+        const original = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner"></span>' + original;
+        btn.disabled = true;
+        const area = document.querySelector('.content-area:not(.hidden)');
+        area?.classList.add('is-loading');
+        setTimeout(() => {
+            btn.innerHTML = original;
+            btn.disabled = false;
+            area?.classList.remove('is-loading');
+            afterFn();
+        }, 350);
+    }
+
     function showScreen(screenId, helpId) {
         allScreens.forEach(s => s.classList.add('hidden'));
         allHelps.forEach(h => h.classList.add('hidden'));
@@ -44,8 +58,8 @@ document.addEventListener('DOMContentLoaded', () => {
         showScreen('screen-issuer-metadata-edit', 'help-content-metadata-edit');
     });
 
-    document.getElementById('btn-save-issuer-metadata').addEventListener('click', () => {
-        showScreen('screen-issuer-metadata-view', 'help-content-metadata');
+    document.getElementById('btn-save-issuer-metadata').addEventListener('click', function() {
+        runWithLoading(this, () => showScreen('screen-issuer-metadata-view', 'help-content-metadata'));
     });
 
     document.getElementById('btn-cancel-edit-metadata').addEventListener('click', () => {
@@ -75,12 +89,12 @@ document.addEventListener('DOMContentLoaded', () => {
         showScreen('screen-credential-register', 'help-content-register');
     });
 
-    document.getElementById('btn-save-credential').addEventListener('click', () => {
-        showScreen('screen-credential-config-list', 'help-content-config');
+    document.getElementById('btn-save-credential').addEventListener('click', function() {
+        runWithLoading(this, () => showScreen('screen-credential-config-list', 'help-content-config'));
     });
 
     // Property Interaction
-    document.getElementById('btn-save-property').addEventListener('click', () => {
-        alert('Property saved successfully!');
+    document.getElementById('btn-save-property').addEventListener('click', function() {
+        runWithLoading(this, () => showScreen('screen-property', 'help-content-property'));
     });
 });

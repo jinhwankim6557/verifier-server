@@ -20,6 +20,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.omnione.did.oid4vc.dcql.core.DCQLCredentialMatcher;
+import org.omnione.did.oid4vc.dcql.core.credential.ParsedCredential;
+import org.omnione.did.oid4vc.dcql.datamodel.DCQLQuery;
 import org.omnione.did.oid4vc.oid4vp.dto.VerificationSession;
 import org.omnione.did.oid4vc.oid4vp.exception.OID4VPErrorCode;
 import org.omnione.did.oid4vc.oid4vp.exception.OID4VPException;
@@ -27,6 +30,7 @@ import org.omnione.did.oid4vc.oid4vp.repository.SessionRepository;
 import org.omnione.did.oid4vc.oid4vp.util.crypto.VPTokenEncryptor;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -106,6 +110,100 @@ public class SPHelperService {
 
         log.info("VP Token retrieved successfully for transactionId: {}", transactionId);
         return result;
+    }
+
+    /**
+     * Get decrypted VP Token with parsed claims by transaction ID.
+     * Parses each credential using the appropriate adapter (mdoc, SD-JWT, etc.)
+     * and returns structured claims alongside raw tokens.
+     *
+     * @param transactionId the transaction ID
+     * @return Map containing parsed credentials with claims and metadata
+     * @throws OID4VPException if session not found, not completed, or parsing fails
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getDecryptedVPTokenWithParsedClaims(String transactionId) throws OID4VPException {
+        Map<String, Object> baseResult = getDecryptedVPToken(transactionId);
+
+        Map<String, List<Object>> vpTokenMap = (Map<String, List<Object>>) baseResult.get("vpToken");
+
+        // Find session to get DCQL query for format info
+        VerificationSession session = sessionRepository.findByTransactionId(transactionId)
+                .orElseThrow(() -> new OID4VPException(
+                        OID4VPErrorCode.ERR_CODE_AUTH_INVALID_SESSION,
+                        "Session not found for transactionId: " + transactionId));
+
+        Map<String, String> credentialFormats = resolveCredentialFormats(session.getDcqlQuery());
+
+        // Parse each credential
+        List<Map<String, Object>> parsedCredentials = new ArrayList<>();
+
+        for (Map.Entry<String, List<Object>> entry : vpTokenMap.entrySet()) {
+            String credentialId = entry.getKey();
+            List<Object> tokens = entry.getValue();
+            String format = credentialFormats.getOrDefault(credentialId, null);
+
+            for (Object tokenObj : tokens) {
+                String rawToken;
+                try {
+                    rawToken = tokenObj instanceof String
+                            ? (String) tokenObj
+                            : objectMapper.writeValueAsString(tokenObj);
+                } catch (JsonProcessingException e) {
+                    log.warn("Failed to serialize credential '{}': {}", credentialId, e.getMessage());
+                    continue;
+                }
+
+                Map<String, Object> credentialInfo = new LinkedHashMap<>();
+                credentialInfo.put("id", credentialId);
+                credentialInfo.put("format", format);
+
+                try {
+                    ParsedCredential parsed = DCQLCredentialMatcher.parseCredential(rawToken, format);
+                    credentialInfo.put("format", parsed.getFormat());
+                    credentialInfo.put("claims", parsed.getAllClaims());
+                    credentialInfo.put("metadata", parsed.getMetadata());
+                } catch (Exception e) {
+                    log.warn("Failed to parse credential '{}': {}", credentialId, e.getMessage());
+                    credentialInfo.put("parseError", e.getMessage());
+                }
+
+                parsedCredentials.add(credentialInfo);
+            }
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("transactionId", transactionId);
+        result.put("status", baseResult.get("status"));
+        result.put("credentials", parsedCredentials);
+        result.put("nonce", baseResult.get("nonce"));
+        result.put("createdAt", baseResult.get("createdAt"));
+
+        log.info("VP Token parsed with claims for transactionId: {}, credentials: {}", transactionId, parsedCredentials.size());
+        return result;
+    }
+
+    /**
+     * Resolves credential ID to format mapping from DCQL query.
+     */
+    private Map<String, String> resolveCredentialFormats(String dcqlQueryJson) {
+        Map<String, String> formats = new LinkedHashMap<>();
+        if (dcqlQueryJson == null || dcqlQueryJson.trim().isEmpty()) {
+            return formats;
+        }
+        try {
+            DCQLQuery dcqlQuery = objectMapper.readValue(dcqlQueryJson, DCQLQuery.class);
+            if (dcqlQuery.getCredentials() != null) {
+                for (DCQLQuery.CredentialQuery cq : dcqlQuery.getCredentials()) {
+                    if (cq.getId() != null && cq.getFormat() != null) {
+                        formats.put(cq.getId(), cq.getFormat());
+                    }
+                }
+            }
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to parse DCQL query for format resolution: {}", e.getMessage());
+        }
+        return formats;
     }
 
     /**

@@ -51,6 +51,7 @@ import org.omnione.did.verifier.v1.agent.dto.RequestVerifyProofReqDto;
 import org.omnione.did.verifier.v1.agent.dto.RequestVerifyReqDto;
 import org.omnione.did.verifier.v1.agent.dto.RequestVerifyResDto;
 import org.omnione.did.verifier.v1.common.service.StorageService;
+import org.omnione.did.verifier.v1.common.service.VpSubmitAuditService;
 import org.omnione.did.verifier.v1.model.data.ProofVerifyParam;
 import org.omnione.did.verifier.v1.model.request.VpVerificationRequest;
 import org.omnione.did.verifier.v1.model.request.ZkpVerificationRequest;
@@ -90,6 +91,7 @@ public class VpVerificationApplicationService {
     private final TransactionService transactionService;
     private final VpProfileRepository vpProfileRepository;
     private final VpSubmitRepository vpSubmitRepository;
+    private final VpSubmitAuditService vpSubmitAuditService;
     private final StorageService storageService;
     private final ObjectMapper objectMapper;
 
@@ -162,11 +164,11 @@ public class VpVerificationApplicationService {
 
         } catch (OpenDidException e) {
             log.error("OpenDidException during requestVerify: {}", e.getErrorCode().getMessage());
-            handleTxFailure(requestVerifyReqDto.getTxId());
+            handleTxFailure(requestVerifyReqDto.getTxId(), e.getErrorCode().getCode());
             throw e;
         } catch (Exception e) {
             log.error("Exception during requestVerify: {}", e.getMessage(), e);
-            handleTxFailure(requestVerifyReqDto.getTxId());
+            handleTxFailure(requestVerifyReqDto.getTxId(), ErrorCode.FAILED_TO_REQUEST_VERIFY.getCode());
             throw new OpenDidException(ErrorCode.FAILED_TO_REQUEST_VERIFY);
         }
     }
@@ -246,11 +248,11 @@ public class VpVerificationApplicationService {
 
         } catch (OpenDidException e) {
             log.error("OpenDidException during requestVerifyProof: {}", e.getErrorCode().getMessage());
-            handleTxFailure(requestVerifyProofReqDto.getTxId());
+            handleTxFailure(requestVerifyProofReqDto.getTxId(), e.getErrorCode().getCode());
             throw e;
         } catch (Exception e) {
             log.error("Exception during requestVerifyProof: {}", e.getMessage(), e);
-            handleTxFailure(requestVerifyProofReqDto.getTxId());
+            handleTxFailure(requestVerifyProofReqDto.getTxId(), ErrorCode.FAILED_TO_VERIFY_PROOF.getCode());
             throw new OpenDidException(ErrorCode.FAILED_TO_VERIFY_PROOF);
         }
     }
@@ -334,7 +336,21 @@ public class VpVerificationApplicationService {
         }
     }
 
-    void handleTxFailure(String txId) {
+    void handleTxFailure(String txId, String errorCode) {
+        Long transactionId = null;
+        try {
+            Transaction transaction = transactionService.findTransactionByTxId(txId);
+            if (transaction != null) {
+                transactionId = transaction.getId();
+            }
+        } catch (Exception e) {
+            log.warn("handleTxFailure: failed to resolve transaction by txId {}", txId, e);
+        }
+
+        if (transactionId != null) {
+            vpSubmitAuditService.recordFailure(transactionId, null, null, errorCode, null);
+        }
+
         try {
             transactionService.updateErrorTransactionStatus(txId, TransactionStatus.FAILED);
         } catch (Exception ex) {

@@ -34,5 +34,9 @@
   <include file="set.3/protocol-create_oid4vp_session_mapping.xml" relativeToChangelogFile="true" />
   <include file="set.3/protocol-seed_oid4vp_config.xml" relativeToChangelogFile="true" />
   <include file="set.3/protocol-create_oid4vp_session.xml" relativeToChangelogFile="true" />
+  <include file="set.3/protocol-alter_vp_submit_for_audit.xml" relativeToChangelogFile="true" />
+  <include file="set.4/protocol-alter_vp_submit_for_mdoc.xml" relativeToChangelogFile="true" />
+  <include file="set.4/protocol-update_oid4vp_config_for_mdoc.xml" relativeToChangelogFile="true" />
+  <include file="set.4/protocol-add_scope_mapping_client_id_scheme.xml" relativeToChangelogFile="true" />
 
 </databaseChangeLog>

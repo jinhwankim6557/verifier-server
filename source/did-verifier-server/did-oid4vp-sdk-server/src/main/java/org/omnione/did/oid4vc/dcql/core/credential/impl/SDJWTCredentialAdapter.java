@@ -17,12 +17,15 @@
 package org.omnione.did.oid4vc.dcql.core.credential.impl;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
+import org.omnione.did.oid4vc.dcql.core.ClaimMatchingHelper;
 import org.omnione.did.oid4vc.dcql.core.credential.CredentialAdapter;
 import org.omnione.did.oid4vc.dcql.core.credential.ParsedCredential;
+import org.omnione.did.oid4vc.dcql.datamodel.DCQLQuery;
 import org.omnione.did.oid4vc.dcql.exception.DCQLException;
 import org.omnione.did.sdjwt.datamodel.Disclosure;
 import org.omnione.did.sdjwt.datamodel.SDJWT;
@@ -128,6 +131,52 @@ public class SDJWTCredentialAdapter implements CredentialAdapter {
     @Override
     public Set<String> getReservedClaimNames() {
         return RESERVED_CLAIMS;
+    }
+
+    @Override
+    public Set<String> extractMatchingClaims(ParsedCredential credential,
+        List<DCQLQuery.ClaimQuery> claimQueries) {
+        return ClaimMatchingHelper.extractMatchingClaimsByPath(credential.getAllClaims(), claimQueries);
+    }
+
+    @Override
+    public boolean matchesTrustedAuthorities(ParsedCredential credential,
+        List<DCQLQuery.TrustedAuthority> trustedAuthorities) {
+
+        if (trustedAuthorities == null || trustedAuthorities.isEmpty()) {
+            return true;
+        }
+
+        Map<String, Object> metadata = credential.getMetadata();
+
+        for (DCQLQuery.TrustedAuthority authority : trustedAuthorities) {
+            if (authority == null || authority.getType() == null || authority.getValues() == null) {
+                continue;
+            }
+
+            switch (authority.getType()) {
+                case "x509_san_dns":
+                case "x509_san_uri":
+                    // SD-JWT: check iss claim against trusted authority values
+                    Object iss = metadata.get("iss");
+                    if (iss instanceof String && authority.getValues().contains(iss)) {
+                        return true;
+                    }
+                    break;
+                case "aki":
+                    // SD-JWT: AKI from x5c certificate chain (if available in metadata)
+                    Object aki = metadata.get("aki");
+                    if (aki instanceof String && authority.getValues().contains(aki)) {
+                        return true;
+                    }
+                    break;
+                default:
+                    log.debug("Trusted authority type '{}' not supported for SD-JWT", authority.getType());
+                    break;
+            }
+        }
+
+        return false;
     }
 
     // ========== Private Helper Methods ==========

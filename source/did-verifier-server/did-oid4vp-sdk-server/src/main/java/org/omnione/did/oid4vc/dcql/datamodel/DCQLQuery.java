@@ -64,12 +64,28 @@ public class DCQLQuery {
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private List<ClaimQuery> claims;
 
+    /**
+     * Per OID4VP spec: claim_sets is an array of arrays of claim query IDs.
+     * Each inner array references claim IDs defined in the 'claims' array.
+     * Example: [["a", "b"], ["a", "b", "c"]]
+     */
     @JsonProperty("claim_sets")
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
-    private List<ClaimSet> claimSets;
+    private List<List<String>> claimSets;
+
+    @JsonProperty("trusted_authorities")
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    private List<TrustedAuthority> trustedAuthorities;
 
     @JsonProperty("purpose")
     private String purpose;
+
+    /**
+     * If true, the Wallet MAY return multiple credentials for this query.
+     * Defaults to false (exactly one credential expected).
+     */
+    @JsonProperty("multiple")
+    private Boolean multiple;
 
     @JsonProperty("require_cryptographic_holder_binding")
     private Boolean requireCryptographicHolderBinding;
@@ -85,8 +101,26 @@ public class DCQLQuery {
     @JsonProperty("id")
     private String id;
 
+    /**
+     * For JSON-based credentials (SD-JWT, W3C VC): path to the claim.
+     * Not used for mdoc format.
+     */
     @JsonProperty("path")
     private List<Object> path;
+
+    /**
+     * For mdoc credentials: the namespace of the claim.
+     * e.g., "org.iso.18013.5.1"
+     */
+    @JsonProperty("namespace")
+    private String namespace;
+
+    /**
+     * For mdoc credentials: the name of the claim within the namespace.
+     * e.g., "family_name"
+     */
+    @JsonProperty("claim_name")
+    private String claimName;
 
     @JsonProperty("purpose")
     private String purpose;
@@ -105,22 +139,27 @@ public class DCQLQuery {
     private Object min;
   }
 
+  /**
+   * Trusted authority for credential issuer validation.
+   * Per OID4VP spec section 6.1.1.
+   */
   @Data
   @NoArgsConstructor
   @AllArgsConstructor
   @Builder
   @JsonInclude(JsonInclude.Include.NON_NULL)
-  public static class ClaimSet {
+  public static class TrustedAuthority {
 
-    @JsonProperty("id")
-    private String id;
+    /**
+     * Type of authority validation.
+     * Allowed values: "aki", "etsi_tl", "openid_federation", "x509_san_dns", "x509_san_uri"
+     */
+    @JsonProperty("type")
+    private String type;
 
-    @JsonProperty("claims")
+    @JsonProperty("values")
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
-    private List<ClaimQuery> claims;
-
-    @JsonProperty("purpose")
-    private String purpose;
+    private List<String> values;
   }
 
   @Data
@@ -136,6 +175,13 @@ public class DCQLQuery {
     @JsonProperty("options")
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private List<List<String>> options;
+
+    /**
+     * Per OID4VP spec: whether at least one option must be satisfied.
+     * Defaults to true if not specified.
+     */
+    @JsonProperty("required")
+    private Boolean required;
 
     @JsonProperty("purpose")
     private String purpose;

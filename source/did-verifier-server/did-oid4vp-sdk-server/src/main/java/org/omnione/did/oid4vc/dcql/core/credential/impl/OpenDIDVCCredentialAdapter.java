@@ -19,12 +19,15 @@ package org.omnione.did.oid4vc.dcql.core.credential.impl;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
+import org.omnione.did.oid4vc.dcql.core.ClaimMatchingHelper;
 import org.omnione.did.oid4vc.dcql.core.credential.CredentialAdapter;
 import org.omnione.did.oid4vc.dcql.core.credential.ParsedCredential;
+import org.omnione.did.oid4vc.dcql.datamodel.DCQLQuery;
 import org.omnione.did.oid4vc.dcql.exception.DCQLException;
 import org.omnione.did.opendidvc.datamodel.VerifiablePresentation;
 
@@ -137,44 +140,125 @@ public class OpenDIDVCCredentialAdapter implements CredentialAdapter {
         return RESERVED_CLAIMS;
     }
 
+    @Override
+    public Set<String> extractMatchingClaims(ParsedCredential credential,
+        List<DCQLQuery.ClaimQuery> claimQueries) {
+
+        Map<String, Object> allClaims = credential.getAllClaims();
+
+        if (claimQueries == null || claimQueries.isEmpty()) {
+            return new HashSet<>(allClaims.keySet());
+        }
+
+        Set<String> matched = new HashSet<>();
+        for (DCQLQuery.ClaimQuery claimQuery : claimQueries) {
+            List<Object> path = claimQuery.getPath();
+            if (path == null || path.isEmpty() || !(path.get(0) instanceof String)) {
+                log.debug("OpenDID VC claim query skipped: path must start with a String code");
+                continue;
+            }
+            if (path.size() > 1) {
+                log.debug("OpenDID VC claim query: path elements beyond [0] are ignored (code-only lookup)");
+            }
+
+            String code = (String) path.get(0);
+            Object claimEntry = allClaims.get(code);
+            if (!(claimEntry instanceof Map)) {
+                log.debug("OpenDID VC claim not found for code: {}", code);
+                continue;
+            }
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> claimMap = (Map<String, Object>) claimEntry;
+            Object claimValue = claimMap.get("value");
+
+            if (ClaimMatchingHelper.meetsConditions(claimQuery, claimValue)) {
+                matched.add(code);
+                log.debug("OpenDID VC claim matched: {}", code);
+            }
+        }
+        return matched;
+    }
+
+    @Override
+    public boolean matchesTrustedAuthorities(ParsedCredential credential,
+        List<DCQLQuery.TrustedAuthority> trustedAuthorities) {
+
+        if (trustedAuthorities == null || trustedAuthorities.isEmpty()) {
+            return true;
+        }
+
+        Map<String, Object> metadata = credential.getMetadata();
+
+        for (DCQLQuery.TrustedAuthority authority : trustedAuthorities) {
+            if (authority == null || authority.getType() == null || authority.getValues() == null) {
+                continue;
+            }
+
+            switch (authority.getType()) {
+                case "x509_san_dns":
+                case "x509_san_uri":
+                    // OpenDID VC: check issuer field
+                    Object issuer = metadata.get("issuer");
+                    if (issuer instanceof String && authority.getValues().contains(issuer)) {
+                        return true;
+                    }
+                    break;
+                default:
+                    log.debug("Trusted authority type '{}' not supported for OpenDID VC", authority.getType());
+                    break;
+            }
+        }
+
+        return false;
+    }
+
     // ========== Private Helper Methods ==========
 
+    /**
+     * Extracts claims from an OpenDID VC credentialSubject.
+     *
+     * <p>OpenDID VC stores claims as a list of Claim objects under
+     * {@code credentialSubject.claims}, each with fields
+     * {@code code, caption, type, format, hideValue, value}. This method
+     * flattens that list into a map keyed by {@code code}, with the whole
+     * Claim object as the value so downstream can access any field.
+     */
     @SuppressWarnings("unchecked")
     private Map<String, Object> extractAllClaimsFromMap(Map<String, Object> vcMap) {
         Map<String, Object> allClaims = new HashMap<>();
 
         Object credentialSubject = vcMap.get("credentialSubject");
         if (credentialSubject instanceof Map) {
-            Map<String, Object> subjectMap = (Map<String, Object>) credentialSubject;
-            // Add all claims from credentialSubject
-            for (Map.Entry<String, Object> entry : subjectMap.entrySet()) {
-                String key = entry.getKey();
-                // Skip reserved fields within credentialSubject (like 'id')
-                if (!"id".equals(key)) {
-                    allClaims.put(key, entry.getValue());
-                }
-            }
+            collectClaimsFromSubject((Map<String, Object>) credentialSubject, allClaims);
         } else if (credentialSubject instanceof List) {
-            // Handle array of credential subjects
-            List<?> subjects = (List<?>) credentialSubject;
-            for (int i = 0; i < subjects.size(); i++) {
-                Object subject = subjects.get(i);
+            for (Object subject : (List<?>) credentialSubject) {
                 if (subject instanceof Map) {
-                    Map<String, Object> subjectMap = (Map<String, Object>) subject;
-                    for (Map.Entry<String, Object> entry : subjectMap.entrySet()) {
-                        String key = entry.getKey();
-                        if (!"id".equals(key)) {
-                            // Prefix with index if multiple subjects
-                            String claimKey = subjects.size() > 1 ? "subject[" + i + "]." + key : key;
-                            allClaims.put(claimKey, entry.getValue());
-                        }
-                    }
+                    collectClaimsFromSubject((Map<String, Object>) subject, allClaims);
                 }
             }
         }
 
-        log.debug("Extracted {} claims from OpenDID VC", allClaims.size());
+        log.debug("Extracted {} OpenDID VC claims (keyed by code)", allClaims.size());
         return allClaims;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void collectClaimsFromSubject(Map<String, Object> subjectMap, Map<String, Object> out) {
+        Object claimsObj = subjectMap.get("claims");
+        if (!(claimsObj instanceof List)) {
+            return;
+        }
+        for (Object item : (List<?>) claimsObj) {
+            if (!(item instanceof Map)) {
+                continue;
+            }
+            Map<String, Object> claimMap = (Map<String, Object>) item;
+            Object code = claimMap.get("code");
+            if (code instanceof String) {
+                out.put((String) code, claimMap);
+            }
+        }
     }
 
     private Map<String, Object> extractBaseClaims(Map<String, Object> allClaims) {

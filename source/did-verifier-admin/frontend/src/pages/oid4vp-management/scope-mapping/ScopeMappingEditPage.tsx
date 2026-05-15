@@ -18,11 +18,18 @@ interface ClaimEntry {
   values: string;
 }
 
+interface MdocClaimEntry {
+  id: string;
+  namespace: string;
+  claimName: string;
+}
+
 interface CredentialQueryData {
   credentialId: string;
   format: string;
   metaValues: string;
   claims: ClaimEntry[];
+  mdocClaims: MdocClaimEntry[];
 }
 
 interface ScopeMappingFormData {
@@ -36,19 +43,23 @@ interface ErrorState {
   credentialId?: string;
 }
 
-const FORMATS = ['dc+sd-jwt', 'vc+sd-jwt', 'opendid_vc'] as const;
+const FORMATS = ['dc+sd-jwt', 'vc+sd-jwt', 'opendid_vc', 'mso_mdoc'] as const;
 
-const getMetaKey = (format: string) =>
-  format === 'opendid_vc' ? 'credential_schema_id_values' : 'vct_values';
+const getMetaKey = (format: string) => {
+  if (format === 'opendid_vc') return 'credential_schema_id_values';
+  if (format === 'mso_mdoc') return 'doctype_value';
+  return 'vct_values';
+};
 
-const getMetaHint = (format: string) =>
-  format === 'opendid_vc'
-    ? 'Credential Schema ID list (use TAS Search)'
-    : 'VCT values for dc+sd-jwt / vc+sd-jwt';
+const getMetaHint = (format: string) => {
+  if (format === 'opendid_vc') return 'Credential Schema ID list (use TAS Search)';
+  if (format === 'mso_mdoc') return 'mDoc docType (e.g. org.iso.18013.5.1.mDL)';
+  return 'VCT values for dc+sd-jwt / vc+sd-jwt';
+};
 
 const parseDcqlToForm = (dcqlStr: string): CredentialQueryData => {
   const defaultVal: CredentialQueryData = {
-    credentialId: '', format: 'dc+sd-jwt', metaValues: '', claims: [],
+    credentialId: '', format: 'dc+sd-jwt', metaValues: '', claims: [], mdocClaims: [],
   };
   try {
     const dcql = typeof dcqlStr === 'string' ? JSON.parse(dcqlStr) : dcqlStr;
@@ -56,18 +67,25 @@ const parseDcqlToForm = (dcqlStr: string): CredentialQueryData => {
     const cred = dcql.credentials[0];
     const format = cred.format || 'dc+sd-jwt';
     const metaKey = getMetaKey(format);
-    const metaValues = cred.meta?.[metaKey] ? JSON.stringify(cred.meta[metaKey]) : '';
-    const claims: ClaimEntry[] = (cred.claims || []).map((c: any) => ({
-      id: c.id || '',
-      path: c.path ? JSON.stringify(c.path) : '',
-      values: c.values ? JSON.stringify(c.values) : '',
-    }));
-    return {
-      credentialId: cred.id || '',
-      format,
-      metaValues,
-      claims,
-    };
+    const rawMeta = cred.meta?.[metaKey];
+    const metaValues = rawMeta != null
+      ? (typeof rawMeta === 'string' ? rawMeta : JSON.stringify(rawMeta))
+      : '';
+    const mdocClaims: MdocClaimEntry[] = format === 'mso_mdoc'
+      ? (cred.claims || []).map((c: any) => ({
+          id: c.id || '',
+          namespace: c.namespace || '',
+          claimName: c.claim_name || '',
+        }))
+      : [];
+    const claims: ClaimEntry[] = format !== 'mso_mdoc'
+      ? (cred.claims || []).map((c: any) => ({
+          id: c.id || '',
+          path: c.path ? JSON.stringify(c.path) : '',
+          values: c.values ? JSON.stringify(c.values) : '',
+        }))
+      : [];
+    return { credentialId: cred.id || '', format, metaValues, claims, mdocClaims };
   } catch {
     return defaultVal;
   }
@@ -89,7 +107,7 @@ const ScopeMappingEditPage = () => {
   const [originalFormData, setOriginalFormData] = useState<ScopeMappingFormData | null>(null);
 
   const [credQuery, setCredQuery] = useState<CredentialQueryData>({
-    credentialId: '', format: 'dc+sd-jwt', metaValues: '', claims: [],
+    credentialId: '', format: 'dc+sd-jwt', metaValues: '', claims: [], mdocClaims: [],
   });
   const [originalCredQuery, setOriginalCredQuery] = useState<CredentialQueryData | null>(null);
 
@@ -98,6 +116,7 @@ const ScopeMappingEditPage = () => {
   const [tasLoading, setTasLoading] = useState(false);
 
   const isOpendidVc = credQuery.format === 'opendid_vc';
+  const isMdoc = credQuery.format === 'mso_mdoc';
 
   useEffect(() => {
     const fetchData = async () => {
@@ -151,14 +170,27 @@ const ScopeMappingEditPage = () => {
 
     if (credQuery.metaValues.trim()) {
       const metaKey = getMetaKey(credQuery.format);
-      try {
-        cred.meta = { [metaKey]: JSON.parse(credQuery.metaValues) };
-      } catch {
-        cred.meta = { [metaKey]: [credQuery.metaValues.trim()] };
+      if (isMdoc) {
+        cred.meta = { [metaKey]: credQuery.metaValues.trim() };
+      } else {
+        try {
+          cred.meta = { [metaKey]: JSON.parse(credQuery.metaValues) };
+        } catch {
+          cred.meta = { [metaKey]: [credQuery.metaValues.trim()] };
+        }
       }
     }
 
-    if (!isOpendidVc && credQuery.claims.length > 0) {
+    if (isMdoc && credQuery.mdocClaims.length > 0) {
+      const claims = credQuery.mdocClaims
+        .filter(c => c.namespace.trim() && c.claimName.trim())
+        .map(c => ({
+          ...(c.id ? { id: c.id } : {}),
+          namespace: c.namespace.trim(),
+          claim_name: c.claimName.trim(),
+        }));
+      if (claims.length > 0) cred.claims = claims;
+    } else if (!isOpendidVc && !isMdoc && credQuery.claims.length > 0) {
       const claims: any[] = [];
       credQuery.claims.forEach(c => {
         if (!c.path.trim()) return;
@@ -186,7 +218,34 @@ const ScopeMappingEditPage = () => {
 
   const handleFormatChange = (e: SelectChangeEvent<string>) => {
     const format = e.target.value;
-    setCredQuery(prev => ({ ...prev, format, metaValues: '', claims: [] }));
+    setCredQuery(prev => ({
+      ...prev,
+      format,
+      metaValues: '',
+      claims: [],
+      mdocClaims: [],
+    }));
+  };
+
+  const addMdocClaim = () => {
+    setCredQuery(prev => ({
+      ...prev,
+      mdocClaims: [...prev.mdocClaims, { id: '', namespace: '', claimName: '' }],
+    }));
+  };
+
+  const updateMdocClaim = (index: number, field: keyof MdocClaimEntry, value: string) => {
+    setCredQuery(prev => ({
+      ...prev,
+      mdocClaims: prev.mdocClaims.map((c, i) => i === index ? { ...c, [field]: value } : c),
+    }));
+  };
+
+  const removeMdocClaim = (index: number) => {
+    setCredQuery(prev => ({
+      ...prev,
+      mdocClaims: prev.mdocClaims.filter((_, i) => i !== index),
+    }));
   };
 
   const addClaim = () => {
@@ -433,8 +492,47 @@ const ScopeMappingEditPage = () => {
           </Box>
         </Box>
 
-        {/* Claims */}
-        {!isOpendidVc && (
+        {/* Claims — format에 따라 분기 */}
+        {isMdoc && (
+          <>
+            <SectionLabel>Claims (Optional) — Namespace + Claim Name</SectionLabel>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr 40px', gap: 1, mb: 1 }}>
+              <Typography variant="caption" color="text.secondary">ID</Typography>
+              <Typography variant="caption" color="text.secondary">Namespace</Typography>
+              <Typography variant="caption" color="text.secondary">Claim Name</Typography>
+              <span />
+            </Box>
+            {credQuery.mdocClaims.map((claim, idx) => (
+              <Box key={idx} sx={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr 40px', gap: 1, mb: 1 }}>
+                <TextField
+                  size="small" placeholder="claim_id"
+                  value={claim.id}
+                  onChange={(e) => updateMdocClaim(idx, 'id', e.target.value)}
+                />
+                <TextField
+                  size="small" placeholder="org.iso.18013.5.1"
+                  value={claim.namespace}
+                  onChange={(e) => updateMdocClaim(idx, 'namespace', e.target.value)}
+                />
+                <TextField
+                  size="small" placeholder="family_name"
+                  value={claim.claimName}
+                  onChange={(e) => updateMdocClaim(idx, 'claimName', e.target.value)}
+                />
+                <IconButton size="small" color="error" onClick={() => removeMdocClaim(idx)}>
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            ))}
+            <Button
+              variant="outlined" size="small" startIcon={<AddIcon />}
+              onClick={addMdocClaim} sx={{ mt: 1 }}
+            >
+              Add Claim
+            </Button>
+          </>
+        )}
+        {!isOpendidVc && !isMdoc && (
           <>
             <SectionLabel>Claims (Optional)</SectionLabel>
             <Box sx={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr 40px', gap: 1, mb: 1 }}>

@@ -10,3 +10,19 @@ dist/
 out/
 target/
 *.log
+
+# Self-signed PoC private key — never commit
+source/did-verifier-server/src/main/resources/cert/*.key
+
+# 외부 프로젝트 디렉토리 (각자 별도 git repo)
+source/did-ca-aos/
+source/did-demo-server/
+
+# 작업 메모 / PoC 자산
+AGENTS.md
+designtemplate/CLAUDE.md
+designtemplate/Rjemfjr.md
+designtemplate/plan.html
+designtemplate/unified-verifier/
+designtemplate/unified-verifier-mobile/
+designtemplate/unified-verifier-spec-kit/

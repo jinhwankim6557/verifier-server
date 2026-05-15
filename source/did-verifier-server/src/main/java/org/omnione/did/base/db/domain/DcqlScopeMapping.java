@@ -27,4 +27,10 @@ public class DcqlScopeMapping extends BaseEntity implements Serializable {
     @Column(name = "enabled", nullable = false)
     @Builder.Default
     private Boolean enabled = true;
+    /**
+     * clientId scheme 재정의. null이면 DCQL format 기반 자동 결정
+     * ("decentralized_identifier" 또는 "x509_san_dns")
+     */
+    @Column(name = "client_id_scheme", length = 50)
+    private String clientIdScheme;
 }

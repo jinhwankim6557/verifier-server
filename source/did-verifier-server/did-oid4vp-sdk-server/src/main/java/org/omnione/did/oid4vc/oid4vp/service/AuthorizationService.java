@@ -166,6 +166,60 @@ public class AuthorizationService {
   }
 
   /**
+   * Retrieves authorization request as JWS format with x5c certificate chain.
+   *
+   * @param requestId the request identifier
+   * @param privateKey the private key for signing
+   * @param x5cCertChain the x5c certificate chain (leaf first, Base64 DER encoded)
+   * @return ServiceResult containing JWS string or error information
+   */
+  public ServiceResult<String> getAuthorizationRequest(
+      String requestId, PrivateKey privateKey, List<String> x5cCertChain) {
+
+    log.info("Retrieving authorization request (JWS with x5c) for request_id: {}", requestId);
+
+    try {
+      Optional<VerificationSession> sessionOpt = sessionRepository.findByRequestId(requestId);
+
+      if (sessionOpt.isEmpty()) {
+        log.warn("Authorization request not found for request_id: {}", requestId);
+        return ServiceResult.notFound(ERROR_INVALID_REQUEST_URI,
+            "The request_uri is invalid or has expired");
+      }
+
+      VerificationSession session = sessionOpt.get();
+
+      if (isSessionExpired(session)) {
+        log.warn("Authorization request expired for request_id: {}", requestId);
+        return ServiceResult.notFound(ERROR_INVALID_REQUEST_URI, "The request_uri has expired");
+      }
+
+      if (session.getRequestUriFetchedAt() != null) {
+        log.warn("Authorization request already fetched for request_id: {}", requestId);
+        return ServiceResult.badRequest(ERROR_INVALID_REQUEST_URI,
+            "The request_uri has already been used");
+      }
+
+      Map<String, Object> authRequest = buildAuthorizationRequest(session);
+      String jws = createSignedAuthorizationRequestWithX5c(authRequest, privateKey, x5cCertChain);
+
+      session.setRequestUriFetchedAt(System.currentTimeMillis());
+      session.setStatus(OID4VPHelperService.SESSION_STATUS_REQUEST_FETCHED);
+      sessionRepository.saveByState(session.getState(), session);
+
+      log.info("Successfully retrieved authorization request (JWS with x5c) for request_id: {}", requestId);
+      return ServiceResult.success(jws, CONTENT_TYPE_JWT);
+
+    } catch (OID4VPException e) {
+      log.error("Failed to sign authorization request with x5c", e);
+      return ServiceResult.serverError(ERROR_INVALID_REQUEST, "Failed to sign authorization request");
+    } catch (JsonProcessingException e) {
+      log.error("Failed to process JSON", e);
+      return ServiceResult.serverError(ERROR_PROCESSING_ERROR, "Failed to process authorization request");
+    }
+  }
+
+  /**
    * Handles response from verifiable presentation.
    *
    * @param vpTokenMap the parsed VP Token Map (credential type -> list of credentials)
@@ -245,6 +299,8 @@ public class AuthorizationService {
 
     if (requiresResponseUri(session.getResponseMode())) {
       authRequest.put("response_uri", config.getResponseUrl());
+    } else if ("fragment".equals(session.getResponseMode())) {
+      authRequest.put("redirect_uri", config.getFragmentCallbackUrl());
     } else {
       authRequest.put("redirect_uri", config.getResponseUrl());
     }
@@ -353,6 +409,52 @@ public class AuthorizationService {
   }
 
   /**
+   * Creates a signed Authorization Request Object (JWS) with x5c certificate chain header.
+   */
+  public String createSignedAuthorizationRequestWithX5c(Map<String, Object> authRequest, PrivateKey privateKey, List<String> x5cCertChain)
+      throws OID4VPException {
+    try {
+      OID4VPConfig config = configService.getOID4VPConfig();
+
+      if (privateKey == null) {
+        throw new OID4VPException(OID4VPErrorCode.ERR_CODE_AUTH_SIGNER_REQUIRED, "PrivateKey cannot be null");
+      }
+
+      // Add iat claim
+      Map<String, Object> payload = new LinkedHashMap<>(authRequest);
+      payload.put("iat", System.currentTimeMillis() / 1000);
+
+      // Create JWS Header with x5c certificate chain
+      Map<String, Object> header = new LinkedHashMap<>();
+      header.put("alg", "ES256");
+      header.put("typ", "oauth-authz-req+jwt");
+      header.put("x5c", x5cCertChain);
+
+      SignedJWT signedJWT = new SignedJWT(header, payload);
+      signedJWT.sign(new ECDSASigner(privateKey));
+
+      log.debug("Created signed authorization request (JWS) with x5c certificate chain");
+      return signedJWT.serialize();
+
+    } catch (OID4VPException e) {
+      log.error("Failed to create signed authorization request with x5c", e);
+      throw new OID4VPException(OID4VPErrorCode.ERR_CODE_AUTH_SIGN_FAILED, e.getErrorMsg(), e);
+    } catch (Exception e) {
+      log.error("Failed to create signed authorization request with x5c", e);
+      throw new OID4VPException(OID4VPErrorCode.ERR_CODE_AUTH_SIGN_FAILED, e.getMessage(), e);
+    }
+  }
+
+  /**
+   * Checks if the verifier is configured to use x509_san_dns client ID scheme.
+   */
+  public boolean isX509SanDns() {
+    OID4VPConfig config = configService.getOID4VPConfig();
+    return config.getClientId() != null
+        && "x509_san_dns".equals(config.getClientId().getScheme());
+  }
+
+  /**
    * Adds client metadata to authorization request
    */
   private void addClientMetadata(Map<String, Object> authRequest) {
@@ -382,7 +484,7 @@ public class AuthorizationService {
    * Checks if response_mode requires response_uri
    */
   private boolean requiresResponseUri(String responseMode) {
-    return List.of("direct_post", "query").contains(responseMode);
+    return List.of("direct_post", "dc_api").contains(responseMode);
   }
 
   /**

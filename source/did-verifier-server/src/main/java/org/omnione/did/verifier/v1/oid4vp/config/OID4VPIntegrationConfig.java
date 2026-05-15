@@ -6,6 +6,7 @@ import org.omnione.did.base.db.repository.Oid4vpConfigRepository;
 import org.omnione.did.base.db.repository.Oid4vpSessionJpaRepository;
 import org.omnione.did.oid4vc.formatter.exception.FormatterException;
 import org.omnione.did.oid4vc.formatter.oid4vp.verifier.VPTokenVerifier;
+import org.omnione.did.oid4vc.formatter.oid4vp.verifier.impl.MDocVPVerifier;
 import org.omnione.did.oid4vc.formatter.oid4vp.verifier.impl.OpenDIDVPVerifier;
 import org.omnione.did.oid4vc.formatter.oid4vp.verifier.impl.SDJWTVPVerifier;
 import org.omnione.did.oid4vc.oid4vp.repository.DCQLScopeMappingRepository;
@@ -45,6 +46,11 @@ public class OID4VPIntegrationConfig {
     @Bean
     public VPTokenVerifier sdJwtVPVerifier() {
         return new SDJWTVPVerifier();
+    }
+
+    @Bean
+    public VPTokenVerifier mdocVPVerifier() {
+        return new MDocVPVerifier();
     }
 
     /**

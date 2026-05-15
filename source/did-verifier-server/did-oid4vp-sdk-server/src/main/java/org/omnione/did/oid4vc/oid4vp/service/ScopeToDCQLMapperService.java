@@ -294,9 +294,13 @@ public class ScopeToDCQLMapperService {
         }
 
         if (cred.getClaimSets() != null) {
-          for (DCQLQuery.ClaimSet claimSet : cred.getClaimSets()) {
-            if (!claimIds.add(claimSet.getId())) {
-              throw new OID4VPException(OID4VPErrorCode.ERR_CODE_SCOPE_DUPLICATE_CLAIM_ID, claimSet.getId());
+          for (List<String> claimSet : cred.getClaimSets()) {
+            // claim_sets now contains arrays of claim ID references;
+            // validate that referenced IDs exist in claims
+            for (String claimId : claimSet) {
+              if (!claimIds.contains(claimId)) {
+                log.warn("claim_sets references unknown claim ID: {}", claimId);
+              }
             }
           }
         }

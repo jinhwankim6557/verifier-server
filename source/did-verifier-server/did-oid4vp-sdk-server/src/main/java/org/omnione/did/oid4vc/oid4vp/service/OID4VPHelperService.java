@@ -17,6 +17,7 @@
 package org.omnione.did.oid4vc.oid4vp.service;
 
 import org.omnione.did.oid4vc.formatter.oid4vp.verifier.VPTokenVerifier;
+import org.omnione.did.oid4vc.formatter.oid4vp.verifier.impl.MDocVPVerifier;
 import org.omnione.did.oid4vc.oid4vp.config.OID4VPConfig;
 import org.omnione.did.oid4vc.oid4vp.dto.DCQLResult;
 import org.omnione.did.oid4vc.oid4vp.dto.ServiceResult;
@@ -34,10 +35,12 @@ import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.util.Base64;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.omnione.did.oid4vc.dcql.core.DCQLCredentialMatcher;
@@ -56,7 +59,8 @@ import java.net.URLEncoder;
 public class OID4VPHelperService {
 
   public static final String RESPONSE_MODE_DIRECT_POST = "direct_post";
-  public static final String RESPONSE_MODE_QUERY = "query";
+  public static final String RESPONSE_MODE_FRAGMENT = "fragment";
+  public static final String RESPONSE_MODE_DC_API = "dc_api";
 
   public static final String PARAM_STATE = "state";
   public static final String PARAM_ERROR = "error";
@@ -95,8 +99,17 @@ public class OID4VPHelperService {
   }
 
   public static boolean requiresResponseUri(String responseMode) {
-    return RESPONSE_MODE_DIRECT_POST.equals(responseMode)
-        || RESPONSE_MODE_QUERY.equals(responseMode);
+    return RESPONSE_MODE_DIRECT_POST.equals(responseMode);
+  }
+
+  /**
+   * Resolves session state by transaction ID.
+   * Used by DC API flow where state is not available.
+   */
+  public String resolveStateByTransactionId(String transactionId) {
+    return sessionRepository.findByTransactionId(transactionId)
+        .map(VerificationSession::getState)
+        .orElse(null);
   }
 
   public String compactJsonString(String jsonString) {
@@ -107,7 +120,7 @@ public class OID4VPHelperService {
     try {
       Object jsonObject = objectMapper.readValue(jsonString, Object.class);
       return objectMapper.writeValueAsString(jsonObject);
-    } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+    } catch (JsonProcessingException e) {
       log.warn("Failed to compact JSON string, returning original: {}", e.getMessage());
       return jsonString;
     }
@@ -504,21 +517,28 @@ public class OID4VPHelperService {
       // Parse DCQL Query for protocol-level validation
       DCQLQuery dcqlQuery = parseDcqlQuery(session.getDcqlQuery());
 
-      List<DCQLQuery.CredentialQuery> dcqlCredentials =
-          (dcqlQuery != null && dcqlQuery.getCredentials() != null)
-              ? dcqlQuery.getCredentials()
-              : List.of();
-
       int keyIndex = 0;
-      int dcqlIndex = 0;
+      Set<String> matchedQueryIds = new HashSet<>();
 
-      // Iterate through each credential type
+      // Iterate through each credential type (credential query ID)
       for (String credentialType : vpTokenMap.keySet()) {
 
         // Protocol-level validation: Validate DCQL credential ID
         validateDcqlCredentialId(dcqlQuery, credentialType);
-        
+
+        // Lookup matching credential query by ID (not by sequential index)
+        DCQLQuery.CredentialQuery expectedCredential = findMatchingCredentialQuery(dcqlQuery, credentialType);
+
         List<Object> credentials = vpTokenMap.get(credentialType);
+
+        // Validate multiple credential count
+        boolean allowMultiple = expectedCredential != null
+            && Boolean.TRUE.equals(expectedCredential.getMultiple());
+        if (!allowMultiple && credentials.size() > 1) {
+          throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_CREDENTIAL_COUNT_MISMATCH,
+              "Credential query '" + credentialType + "' does not allow multiple credentials, but "
+                  + credentials.size() + " were submitted. Set multiple=true to allow.");
+        }
 
         for (Object credentialObj : credentials) {
           String credential = convertToString(credentialObj);
@@ -531,46 +551,69 @@ public class OID4VPHelperService {
           }
           log.debug("verifier format : {}", verifier.getFormat());
 
-          // Check format
-          if (dcqlIndex < dcqlCredentials.size()) {
-            DCQLQuery.CredentialQuery expectedCredential = dcqlCredentials.get(dcqlIndex);
-
-            if (!credentialType.equals(expectedCredential.getId())) {
-              throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_DCQL_ID_MISMATCH,
-                  "Position " + dcqlIndex + " - Expected ID: " + expectedCredential.getId() +
-                      ", Actual: " + credentialType);
-            }
-
+          // Format validation against DCQL query
+          if (expectedCredential != null) {
             if (!verifier.getFormat().equals(expectedCredential.getFormat())) {
               throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_FORMAT_MISMATCH,
-                  "Position " + dcqlIndex + " - Expected format: " + expectedCredential.getFormat() +
+                  "Credential '" + credentialType + "' - Expected format: " + expectedCredential.getFormat() +
                       ", Actual: " + verifier.getFormat());
             }
 
-            // 3. Meta condition validation
+            // Meta condition validation
+            ParsedCredential parsedCredential = null;
             if (expectedCredential.getMeta() != null && !expectedCredential.getMeta().isEmpty()) {
               try {
-                ParsedCredential parsedCredential = DCQLCredentialMatcher.parseCredential(
+                parsedCredential = DCQLCredentialMatcher.parseCredential(
                     credential, expectedCredential.getFormat());
 
                 if (!DCQLCredentialMatcher.matchesMetadata(parsedCredential, expectedCredential.getMeta())) {
                   throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_META_MISMATCH,
-                      "Position " + dcqlIndex + " - Meta condition not satisfied for credential: " + credentialType);
+                      "Credential '" + credentialType + "' - Meta condition not satisfied");
                 }
                 log.debug("Meta condition validated for credential: {}", credentialType);
               } catch (DCQLException e) {
                 throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_META_MISMATCH,
-                    "Position " + dcqlIndex + " - Failed to parse credential for meta validation: " + e.getMessage());
+                    "Credential '" + credentialType + "' - Failed to parse for meta validation: " + e.getMessage());
+              }
+            }
+
+            // Claim-level validation (optional, controlled by verification.enableClaimVerification)
+            boolean enforceClaimConstraints = config.getVerification() != null
+                && config.getVerification().isEnforceClaimConstraints();
+            if (enforceClaimConstraints
+                && expectedCredential.getClaims() != null
+                && !expectedCredential.getClaims().isEmpty()) {
+
+              if (expectedCredential.getClaimSets() != null
+                  && !expectedCredential.getClaimSets().isEmpty()) {
+                log.warn("DCQL claim_sets is not supported; skipping claim_sets evaluation for credential: {}",
+                    credentialType);
+              }
+
+              try {
+                if (parsedCredential == null) {
+                  parsedCredential = DCQLCredentialMatcher.parseCredential(
+                      credential, expectedCredential.getFormat());
+                }
+                String failedClaim = DCQLCredentialMatcher.verifyClaimConstraints(
+                    parsedCredential, expectedCredential.getClaims());
+                if (failedClaim != null) {
+                  throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_CLAIM_MISMATCH,
+                      "Credential '" + credentialType + "' - Claim not satisfied: " + failedClaim);
+                }
+                log.debug("Claim verification passed for credential: {}", credentialType);
+              } catch (DCQLException e) {
+                throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_CLAIM_MISMATCH,
+                    "Credential '" + credentialType + "' - Failed to parse for claim validation: " + e.getMessage());
               }
             }
           }
 
-          dcqlIndex++;
-
           // Extract issuer identifier to determine verification method (kid vs x5c)
           IdentifierResult issuerIdentifier = verifier.extractIssuerIdentifier(credential);
           boolean isX5cBased = issuerIdentifier != null
-              && issuerIdentifier.getType() == IdentifierResult.Type.SD_JWT_X5C;
+              && (issuerIdentifier.getType() == IdentifierResult.Type.SD_JWT_X5C
+                  || issuerIdentifier.getType() == IdentifierResult.Type.MSO_MDOC_X5C);
 
           log.debug("Issuer identifier type: {}, isX5cBased: {}",
               issuerIdentifier != null ? issuerIdentifier.getType() : "null", isX5cBased);
@@ -580,7 +623,6 @@ public class OID4VPHelperService {
 
           // For kid-based verification, validate and get public keys
           if (!isX5cBased) {
-            // Validate key index
             if (issuerPublicKeys == null || keyIndex >= issuerPublicKeys.size()) {
               throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_INSUFFICIENT_KEYS,
                   "Expected at least " + (keyIndex + 1) + " keys, but got " + (issuerPublicKeys == null ? 0 : issuerPublicKeys.size()));
@@ -588,7 +630,6 @@ public class OID4VPHelperService {
 
             issuerPublicKey = issuerPublicKeys.get(keyIndex);
 
-            // Get holder public key if available
             if (holderPublicKeys != null && keyIndex < holderPublicKeys.size()) {
               holderPublicKey = holderPublicKeys.get(keyIndex);
             }
@@ -601,24 +642,46 @@ public class OID4VPHelperService {
             log.info("x5c-based verification - using trusted root certificates");
           }
 
-          // 1. Presentation Binding Validation (clientId/nonce O)
-          boolean bindingValid = verifier.validatePresentationBinding(credential, config.buildClientId(), session.getNonce());
-          if (!bindingValid) {
-            throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_VERIFICATION_FAILED,
-                "Presentation binding validation failed for type: " + credentialType);
+          // 1. Presentation Binding Validation
+          // DC API (Appendix A.3.1): nonce is wallet-generated, client_id is origin-based
+          // Skip presentation binding for DC API as binding is provided by the platform
+          boolean isDcApi = RESPONSE_MODE_DC_API.equals(session.getResponseMode());
+          if (isDcApi) {
+            log.info("DC API mode: presentation binding validation skipped (platform-provided binding)");
+          } else {
+            boolean bindingValid;
+            if (verifier instanceof MDocVPVerifier mdocVerifier) {
+              bindingValid = mdocVerifier.validatePresentationBinding(
+                  credential, config.buildClientId(), session.getNonce(), config.getResponseUrl());
+            } else {
+              bindingValid = verifier.validatePresentationBinding(
+                  credential, config.buildClientId(), session.getNonce());
+            }
+            if (!bindingValid) {
+              throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_VERIFICATION_FAILED,
+                  "Presentation binding validation failed for type: " + credentialType);
+            }
           }
+          log.info("Presentation binding validation passed for credential: {} (format: {})",
+              credentialType, verifier.getFormat());
 
           // 2. Signature Validation - branch by identifier type (kid vs x5c)
           boolean signatureValid;
           if (isX5cBased) {
-            // X.509 certificate chain based verification
-            if (trustedRoots == null || trustedRoots.isEmpty()) {
-              throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_VERIFICATION_FAILED,
-                  "Trusted root certificates required for x5c-based credential verification");
+            boolean skipX5cChain = config.getVerification() != null
+                && config.getVerification().isSkipX5cChainValidation();
+
+            if (skipX5cChain) {
+              log.warn("x5c chain validation SKIPPED for credential: {} (skipX5cChainValidation=true)", credentialType);
+              signatureValid = true;
+            } else {
+              if (trustedRoots == null || trustedRoots.isEmpty()) {
+                throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_VERIFICATION_FAILED,
+                    "Trusted root certificates required for x5c-based credential verification");
+              }
+              signatureValid = verifier.validateSignatureWithX5c(credential, trustedRoots);
             }
-            signatureValid = verifier.validateSignatureWithX5c(credential, trustedRoots);
           } else {
-            // kid-based verification (existing logic)
             signatureValid = verifier.validateSignature(credential, issuerPublicKey, holderPublicKey);
           }
 
@@ -626,12 +689,60 @@ public class OID4VPHelperService {
             throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_VERIFICATION_FAILED,
                 "Signature verification failed for type: " + credentialType);
           }
+          log.info("Signature verification passed for credential: {} (format: {}, method: {})",
+              credentialType, verifier.getFormat(), isX5cBased ? "x5c" : "kid");
+        }
+
+        matchedQueryIds.add(credentialType);
+        log.info("Credential query '{}' verification completed successfully", credentialType);
+      }
+
+      // Validate that all required (non-multiple-optional) credential queries are satisfied
+      if (dcqlQuery != null && dcqlQuery.getCredentials() != null) {
+        for (DCQLQuery.CredentialQuery cq : dcqlQuery.getCredentials()) {
+          if (!matchedQueryIds.contains(cq.getId())) {
+            throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_CREDENTIAL_COUNT_MISMATCH,
+                "Required credential query '" + cq.getId() + "' not found in VP Token response");
+          }
         }
       }
 
-      if (dcqlIndex != dcqlCredentials.size()) {
-        throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_CREDENTIAL_COUNT_MISMATCH,
-            "Expected " + dcqlCredentials.size() + " credentials, but got " + dcqlIndex);
+      // Validate credential_sets satisfaction
+      if (dcqlQuery != null && dcqlQuery.getCredentialSets() != null
+          && !dcqlQuery.getCredentialSets().isEmpty()) {
+        Set<String> presentedCredentialIds = new HashSet<>(vpTokenMap.keySet());
+        List<String> credentialSetErrors = DCQLCredentialMatcher.validateCredentialSetsSatisfied(
+            dcqlQuery.getCredentialSets(), presentedCredentialIds);
+        if (!credentialSetErrors.isEmpty()) {
+          throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_CREDENTIAL_SET_NOT_SATISFIED,
+              String.join("; ", credentialSetErrors));
+        }
+        log.info("credential_sets validation passed");
+      }
+
+      // Validate trusted_authorities
+      for (String credentialType : vpTokenMap.keySet()) {
+        DCQLQuery.CredentialQuery matchedQuery = findMatchingCredentialQuery(dcqlQuery, credentialType);
+        if (matchedQuery != null && matchedQuery.getTrustedAuthorities() != null
+            && !matchedQuery.getTrustedAuthorities().isEmpty()) {
+          List<Object> credentials = vpTokenMap.get(credentialType);
+          for (Object credentialObj : credentials) {
+            String credential = convertToString(credentialObj);
+            try {
+              ParsedCredential parsedCredential = DCQLCredentialMatcher.parseCredential(
+                  credential, matchedQuery.getFormat());
+              if (!DCQLCredentialMatcher.matchesTrustedAuthorities(
+                  parsedCredential, matchedQuery.getTrustedAuthorities())) {
+                throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_TRUSTED_AUTHORITY_MISMATCH,
+                    "Credential '" + credentialType + "' issuer not in trusted_authorities list");
+              }
+            } catch (DCQLException e) {
+              throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_META_MISMATCH,
+                  "Failed to parse credential for trusted_authorities validation: " + e.getMessage());
+            }
+          }
+          log.info("trusted_authorities validation passed for: {}", credentialType);
+        }
       }
 
       log.info("VP Token verification completed successfully");
@@ -652,7 +763,8 @@ public class OID4VPHelperService {
       sessionRepository.saveByState(session.getState(), session);
       log.info("Session status updated to COMPLETED for state: {}", session.getState());
 
-      if (RESPONSE_MODE_DIRECT_POST.equals(session.getResponseMode())
+      if ((RESPONSE_MODE_DIRECT_POST.equals(session.getResponseMode())
+          || RESPONSE_MODE_FRAGMENT.equals(session.getResponseMode()))
           && session.getClientMetadata() != null) {
         Map<String, Object> metadata = null;
         try {
@@ -716,6 +828,19 @@ public class OID4VPHelperService {
    * @param dcqlQueryJson the DCQL Query JSON string
    * @return parsed DCQLQuery object, or null if input is null/empty
    */
+  /**
+   * Finds the CredentialQuery matching the given credential type ID.
+   */
+  private DCQLQuery.CredentialQuery findMatchingCredentialQuery(DCQLQuery dcqlQuery, String credentialType) {
+    if (dcqlQuery == null || dcqlQuery.getCredentials() == null) {
+      return null;
+    }
+    return dcqlQuery.getCredentials().stream()
+        .filter(cq -> credentialType.equals(cq.getId()))
+        .findFirst()
+        .orElse(null);
+  }
+
   public DCQLQuery parseDcqlQuery(String dcqlQueryJson) throws OID4VPException {
     if (dcqlQueryJson == null || dcqlQueryJson.trim().isEmpty()) {
       log.warn("DCQL Query is null or empty, skipping DCQL validation");

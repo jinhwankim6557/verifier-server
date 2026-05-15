@@ -1,5 +1,5 @@
 import {
-  Box, Button, MenuItem, Select, TextField, Typography, styled,
+  Box, Button, FormControlLabel, MenuItem, Select, Switch, TextField, Typography, styled,
   InputLabel, FormControl, SelectChangeEvent,
 } from '@mui/material';
 import { useDialogs } from '@toolpad/core';
@@ -19,17 +19,25 @@ interface OID4VPConfigData {
   endpoints: { response: string; request: string };
   clientMetadata: { vpFormatsSupported: Record<string, object> };
   crypto: { vpTokenEncryptionKey: string | null };
+  verification?: { skipX5cChainValidation?: boolean; enforceClaimConstraints?: boolean };
 }
 
 const DEFAULT_CONFIG: OID4VPConfigData = {
   baseUrl: '',
   clientName: '',
   invocationScheme: 'openid4vp://',
-  clientId: { scheme: 'decentralized_identity', value: '' },
+  clientId: { scheme: 'decentralized_identifier', value: '' },
   session: { sessionTtl: 300000 },
   endpoints: { response: '/oid4vp/response', request: '/oid4vp/request' },
-  clientMetadata: { vpFormatsSupported: { 'dc+sd-jwt': {}, 'opendid_vc': {} } },
+  clientMetadata: {
+    vpFormatsSupported: {
+      'dc+sd-jwt': {},
+      'opendid_vc': {},
+      'mso_mdoc': { alg_values: ['ES256'] },
+    },
+  },
   crypto: { vpTokenEncryptionKey: null },
+  verification: { skipX5cChainValidation: false, enforceClaimConstraints: false },
 };
 
 const Oid4vpConfigPage = () => {
@@ -52,12 +60,19 @@ const Oid4vpConfigPage = () => {
           clientName: data.clientName || '',
           invocationScheme: data.invocationScheme || 'openid4vp://',
           clientId: {
-            scheme: data.clientId?.scheme || 'decentralized_identity',
+            scheme: data.clientId?.scheme || 'decentralized_identifier',
             value: data.clientId?.value || '',
           },
           session: { sessionTtl: data.session?.sessionTtl ?? 300000 },
           endpoints: data.endpoints || { response: '/oid4vp/response', request: '/oid4vp/request' },
-          clientMetadata: data.clientMetadata || { vpFormatsSupported: { 'dc+sd-jwt': {}, 'opendid_vc': {} } },
+          clientMetadata: data.clientMetadata || {
+            vpFormatsSupported: {
+              'dc+sd-jwt': {},
+              'opendid_vc': {},
+              'mso_mdoc': { alg_values: ['ES256'] },
+            },
+          },
+          verification: data.verification || { skipX5cChainValidation: false, enforceClaimConstraints: false },
           crypto: data.crypto || { vpTokenEncryptionKey: null },
         };
         setConfig(parsed);
@@ -255,7 +270,8 @@ const Oid4vpConfigPage = () => {
               onChange={handleSchemeChange}
             >
               <MenuItem value="redirect_uri">redirect_uri</MenuItem>
-              <MenuItem value="decentralized_identity">decentralized_identity</MenuItem>
+              <MenuItem value="decentralized_identifier">decentralized_identifier</MenuItem>
+              <MenuItem value="x509_san_dns">x509_san_dns</MenuItem>
             </Select>
           </FormControl>
           <Box sx={{ display: 'flex', gap: 1 }}>
@@ -319,6 +335,52 @@ const Oid4vpConfigPage = () => {
         <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
           VP Token 암호화에 사용되는 대칭키입니다. DB seed 또는 직접 설정으로 관리됩니다.
         </Typography>
+
+        <SectionLabel>Verification (mdoc)</SectionLabel>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, pl: 1 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={config.verification?.skipX5cChainValidation ?? false}
+                onChange={(e) =>
+                  setConfig(prev => ({
+                    ...prev,
+                    verification: { ...prev.verification, skipX5cChainValidation: e.target.checked },
+                  }))
+                }
+              />
+            }
+            label={
+              <Box>
+                <Typography variant="body2">Skip X.509 Chain Validation</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  PoC/Dev 환경용. 운영 시 반드시 false로 설정하십시오.
+                </Typography>
+              </Box>
+            }
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={config.verification?.enforceClaimConstraints ?? false}
+                onChange={(e) =>
+                  setConfig(prev => ({
+                    ...prev,
+                    verification: { ...prev.verification, enforceClaimConstraints: e.target.checked },
+                  }))
+                }
+              />
+            }
+            label={
+              <Box>
+                <Typography variant="body2">Enforce Claim Constraints</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  DCQL claim constraint 강제 검증 여부.
+                </Typography>
+              </Box>
+            }
+          />
+        </Box>
 
         <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mt: 4 }}>
           <Button variant="contained" color="primary" onClick={handleSave} disabled={isButtonDisabled}>

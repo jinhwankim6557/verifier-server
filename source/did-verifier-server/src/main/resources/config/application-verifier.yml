@@ -23,3 +23,18 @@ verifier:
   # Verifier API Endpoint 목록
   verifierEndPoints:
     - "http://127.0.0.1:8092/verifier/api/v1"
+
+# mdoc X.509 Trust Anchor 설정
+# MdocTrustAnchorLoader가 사용합니다
+oid4vp:
+  trust:
+    # classpath:cert/ 아래 *.crt 를 IACA 신뢰 앵커로 로드
+    # 운영 배포 시 실제 IACA 인증서 경로로 교체하세요
+    iaca-cert-paths: classpath:cert/*.crt
+    # JDK 기본 신뢰 저장소(cacerts) 포함 여부
+    include-jdk-cacerts: true
+  verifier-x509:
+    # verifier 자신의 X.509 인증서 (x509_san_dns scheme 사용 시 Authorization Request 서명에 사용)
+    cert-path: classpath:cert/verifier_x509.crt
+    # verifier 자신의 X.509 개인키 (PKCS#8 PEM 형식)
+    key-path: classpath:cert/verifier_x509.key

@@ -49,6 +49,9 @@ public class OID4VPConfig {
     @JsonProperty("crypto")
     private Crypto crypto = new Crypto();
 
+    @JsonProperty("verification")
+    private Verification verification = new Verification();
+
     @Data
     public static class Session {
         @JsonProperty("sessionTtl")
@@ -62,6 +65,9 @@ public class OID4VPConfig {
 
         @JsonProperty("request")
         private String request = "/oid4vp/request";
+
+        @JsonProperty("fragmentCallback")
+        private String fragmentCallback = "/oid4vp/fragment/callback";
     }
 
     @Data
@@ -84,12 +90,25 @@ public class OID4VPConfig {
         return baseUrl + endpoints.getRequest();
     }
 
+    public String getFragmentCallbackUrl() {
+        return baseUrl + endpoints.getFragmentCallback();
+    }
+
     public String getInvocationScheme() {
         return invocationScheme;
     }
 
     public String buildClientId() {
       return clientId.getScheme() + ":" + clientId.getValue();
+    }
+
+    @Data
+    public static class Verification {
+        @JsonProperty("skipX5cChainValidation")
+        private boolean skipX5cChainValidation = false;
+
+        @JsonProperty("enforceClaimConstraints")
+        private boolean enforceClaimConstraints = false;
     }
 
     @Data

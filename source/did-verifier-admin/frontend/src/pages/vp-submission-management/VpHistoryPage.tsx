@@ -12,11 +12,13 @@ type Props = {}
 
 type VpSubmitRow = {
   id: string | number;
-  vp: string;
-  holderDID: string;
+  vp: string | null;
+  holderDID: string | null;
   transactionId: number;
-  txId: string;  // 실제 트랜잭션 ID 추가
+  txId: string;
   transactionStatus: string;
+  errorCode: string | null;
+  format?: string | null;
   createdAt: string;
 };
 
@@ -172,29 +174,75 @@ const VpHistoryPage = (props: Props) => {
                   </Typography>
                 ),
               },
-              { 
-                field: 'holderDID', 
-                headerName: "Holder DID", 
+              {
+                field: 'holderDID',
+                headerName: "Holder DID",
                 width: 250,
+                renderCell: (params) => {
+                  const isEmpty = !params.value;
+                  return (
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        color: isEmpty ? '#9e9e9e' : 'inherit',
+                        fontStyle: isEmpty ? 'italic' : 'normal',
+                      }}
+                    >
+                      {params.value || '-'}
+                    </Typography>
+                  );
+                },
+              },
+              {
+                field: 'errorCode',
+                headerName: "Error Code",
+                width: 180,
                 renderCell: (params) => (
-                  <Typography 
+                  <Typography
                     variant="body2"
-                    sx={{ 
+                    sx={{
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
-                      color: params.value === 'N/A' ? '#9e9e9e' : 'inherit',
-                      fontStyle: params.value === 'N/A' ? 'italic' : 'normal',
+                      fontFamily: 'monospace',
+                      fontSize: '12px',
+                      color: params.value ? '#c62828' : '#9e9e9e',
                     }}
                   >
-                    {params.value || 'N/A'}
+                    {params.value || '-'}
                   </Typography>
                 ),
               },
-              { 
-                field: 'createdAt', 
-                headerName: "Created At", 
-                width: 180 
+              {
+                field: 'format',
+                headerName: "Format",
+                width: 140,
+                renderCell: (params) => {
+                  const value = params.value as string | null;
+                  return (
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        fontFamily: 'monospace',
+                        fontSize: '12px',
+                        color: value ? '#1565c0' : '#9e9e9e',
+                      }}
+                    >
+                      {value || '-'}
+                    </Typography>
+                  );
+                },
+              },
+              {
+                field: 'createdAt',
+                headerName: "Created At",
+                width: 180
               },
             ]} 
             selectedRow={selectedRow} 

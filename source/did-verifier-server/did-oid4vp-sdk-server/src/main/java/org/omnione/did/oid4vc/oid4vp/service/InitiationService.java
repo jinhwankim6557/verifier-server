@@ -30,6 +30,7 @@ import org.omnione.did.oid4vc.dcql.core.DCQLQueryValidator;
 import org.omnione.did.oid4vc.dcql.datamodel.DCQLQuery;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
 import java.util.Map;
 import java.util.UUID;
 import java.util.LinkedHashMap;
@@ -47,6 +48,8 @@ public class InitiationService {
   private static final String ERROR_INVALID_REQUEST = "invalid_request";
   private static final String ERROR_INVALID_SCOPE = "invalid_scope";
   private static final String ERROR_SERVER_ERROR = "server_error";
+  private static final String RESPONSE_MODE_DC_API = "dc_api";
+  private static final String RESPONSE_MODE_FRAGMENT = "fragment";
 
   private final ScopeToDCQLMapperService scopeToDCQLMapperService;
   private final VerifierConfigService configService;
@@ -163,7 +166,9 @@ public class InitiationService {
     // Build response
     Map<String, Object> response = new LinkedHashMap<>();
 
-    if (useRequestUri) {
+    if (RESPONSE_MODE_DC_API.equals(responseMode)) {
+      buildDCApiResponse(response, nonce, state, parsedDcqlQuery, mergedClientMetadataJson, config);
+    } else if (useRequestUri) {
       buildRequestUriResponse(response, requestId, responseMode, config);
     } else {
       buildDirectResponse(response, requestId, responseMode, nonce, state,
@@ -233,6 +238,9 @@ public class InitiationService {
     if (requiresResponseUri(responseMode)) {
       authUrl.append("&response_uri=")
           .append(oid4VPHelperService.encodeValue(config.getResponseUrl()));
+    } else if (RESPONSE_MODE_FRAGMENT.equals(responseMode)) {
+      authUrl.append("&redirect_uri=")
+          .append(oid4VPHelperService.encodeValue(config.getFragmentCallbackUrl()));
     } else {
       authUrl.append("&redirect_uri=")
           .append(oid4VPHelperService.encodeValue(config.getResponseUrl()));
@@ -254,6 +262,37 @@ public class InitiationService {
   }
 
   /**
+   * Builds response for DC API method (browser-mediated Digital Credentials API).
+   * Returns the request object that JavaScript can pass to navigator.credentials.get().
+   */
+  public void buildDCApiResponse(Map<String, Object> response, String nonce, String state,
+      String parsedDcqlQuery, String mergedClientMetadataJson, OID4VPConfig config) {
+
+    // OID4VP Appendix A.3.1: Unsigned DC API request
+    // MUST NOT contain: client_id, nonce, state, response_uri
+    // (browser provides origin binding; wallet generates nonce)
+    Map<String, Object> dcApiRequest = new LinkedHashMap<>();
+    dcApiRequest.put("response_type", RESPONSE_TYPE_VP_TOKEN);
+    dcApiRequest.put("response_mode", RESPONSE_MODE_DC_API);
+    try {
+      dcApiRequest.put("dcql_query", objectMapper.readValue(parsedDcqlQuery, Map.class));
+    } catch (JsonProcessingException e) {
+      dcApiRequest.put("dcql_query", parsedDcqlQuery);
+    }
+
+    if (mergedClientMetadataJson != null && !mergedClientMetadataJson.trim().isEmpty()) {
+      try {
+        dcApiRequest.put("client_metadata", objectMapper.readValue(mergedClientMetadataJson, Map.class));
+      } catch (JsonProcessingException e) {
+        dcApiRequest.put("client_metadata", mergedClientMetadataJson);
+      }
+    }
+
+    response.put("dc_api_request", dcApiRequest);
+    response.put("method", "dc_api");
+  }
+
+  /**
    * Helper method to check if both parameters are missing
    */
   private boolean areBothParamsMissing(String dcqlQuery, String scope) {
@@ -272,6 +311,25 @@ public class InitiationService {
    */
   private boolean requiresResponseUri(String responseMode) {
     return "direct_post".equals(responseMode);
+  }
+
+  /**
+   * Builds a web origin-based client_id for DC API.
+   * Format: "origin:{scheme}://{host}[:{port}]"
+   * e.g. baseUrl "http://10.48.17.127:8088" -> "origin:http://10.48.17.127:8088"
+   */
+  private String buildOriginClientId(String baseUrl) {
+    try {
+      URI uri = URI.create(baseUrl);
+      String origin = uri.getScheme() + "://" + uri.getHost();
+      if (uri.getPort() != -1) {
+        origin += ":" + uri.getPort();
+      }
+      return "origin:" + origin;
+    } catch (Exception e) {
+      log.warn("Failed to parse baseUrl for origin client_id: {}", baseUrl);
+      return "origin:" + baseUrl;
+    }
   }
 
   /**

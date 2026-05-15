@@ -22,6 +22,8 @@ public class VpSubmitDTO {
     private Long transactionId;
     private String txId;
     private String transactionStatus;
+    private String errorCode;
+    private String format;
     private String createdAt;
 
     public VpSubmitDTO Builder() {

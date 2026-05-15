@@ -28,6 +28,12 @@ import org.omnione.did.oid4vc.dcql.datamodel.DCQLQuery;
 
 public class DCQLQueryValidator {
 
+  private static final Set<String> TRUSTED_AUTHORITY_TYPES = Set.of(
+      "aki", "etsi_tl", "openid_federation", "x509_san_dns", "x509_san_uri"
+  );
+
+  private static final Set<String> MDOC_FORMATS = Set.of("mso_mdoc");
+
   public static ValidationResult validate(DCQLQuery dcqlQuery) {
     ValidationResult result = new ValidationResult();
 
@@ -52,20 +58,15 @@ public class DCQLQueryValidator {
   }
 
   private static void validateBasicStructure(DCQLQuery dcqlQuery, ValidationResult result) {
-
+    // Per OID4VP spec: credentials is REQUIRED
     boolean hasCredentials =
         dcqlQuery.getCredentials() != null && !dcqlQuery.getCredentials().isEmpty();
-    boolean hasCredentialSets =
-        dcqlQuery.getCredentialSets() != null && !dcqlQuery.getCredentialSets().isEmpty();
 
-    if (!hasCredentials && !hasCredentialSets) {
-      result.addError("DCQL query must have either 'credentials' or 'credential_sets'");
+    if (!hasCredentials) {
+      result.addError("DCQL query must have 'credentials' (REQUIRED per spec)");
     }
 
-    if (hasCredentials && hasCredentialSets) {
-      result.addWarning(
-          "DCQL query has both 'credentials' and 'credential_sets' - credential_sets takes precedence");
-    }
+    // credential_sets is OPTIONAL and works together with credentials
   }
 
   private static void validateCredentials(List<DCQLQuery.CredentialQuery> credentials,
@@ -112,25 +113,28 @@ public class DCQLQueryValidator {
     }
 
     if (credential.getClaims() != null) {
-      validateClaims(credential.getClaims(), context, result);
+      boolean isMdoc = credential.getFormat() != null && MDOC_FORMATS.contains(credential.getFormat());
+      validateClaims(credential.getClaims(), context, isMdoc, result);
     }
 
     if (credential.getClaimSets() != null) {
-      validateCredentialClaimSets(credential.getClaimSets(), context, result);
-
-      if (credential.getClaims() != null) {
-        result.addWarning(
-            context + " has both 'claims' and 'claim_sets' - claim_sets takes precedence");
-      }
+      validateClaimSets(credential.getClaimSets(), credential.getClaims(), context, result);
     }
 
     if (credential.getMeta() != null) {
       validateMeta(credential.getMeta(), context, result);
     }
+
+    if (credential.getTrustedAuthorities() != null) {
+      validateTrustedAuthorities(credential.getTrustedAuthorities(), context, result);
+    }
   }
 
   private static void validateClaims(List<DCQLQuery.ClaimQuery> claims, String context,
-      ValidationResult result) {
+      boolean isMdoc, ValidationResult result) {
+
+    Set<String> claimIds = new HashSet<>();
+
     for (int i = 0; i < claims.size(); i++) {
       DCQLQuery.ClaimQuery claim = claims.get(i);
       String claimContext = context + ".claims[" + i + "]";
@@ -140,10 +144,33 @@ public class DCQLQueryValidator {
         continue;
       }
 
-      if (claim.getPath() == null || claim.getPath().isEmpty()) {
-        result.addError(claimContext + ".path is required and cannot be empty");
+      // Validate claim id uniqueness if present
+      if (claim.getId() != null) {
+        if (claimIds.contains(claim.getId())) {
+          result.addError(claimContext + " has duplicate claim ID: " + claim.getId());
+        } else {
+          claimIds.add(claim.getId());
+        }
+      }
+
+      if (isMdoc) {
+        // mdoc format: accepts namespace+claim_name (spec) or path (EUDI interop)
+        boolean hasNsClaim = claim.getNamespace() != null && claim.getClaimName() != null;
+        boolean hasPath = claim.getPath() != null && !claim.getPath().isEmpty();
+
+        if (!hasNsClaim && !hasPath) {
+          result.addError(claimContext + " requires either namespace+claim_name or path for mso_mdoc format");
+        }
+        if (hasPath) {
+          validatePath(claim.getPath(), claimContext + ".path", result);
+        }
       } else {
-        validatePath(claim.getPath(), claimContext + ".path", result);
+        // JSON-based format: path required
+        if (claim.getPath() == null || claim.getPath().isEmpty()) {
+          result.addError(claimContext + ".path is required and cannot be empty for non-mdoc format");
+        } else {
+          validatePath(claim.getPath(), claimContext + ".path", result);
+        }
       }
 
       if (claim.getValues() != null) {
@@ -165,7 +192,6 @@ public class DCQLQueryValidator {
     for (int i = 0; i < path.size(); i++) {
       Object element = path.get(i);
       if (element == null) {
-
         continue;
       } else if (element instanceof String) {
         String strElement = (String) element;
@@ -192,6 +218,53 @@ public class DCQLQueryValidator {
 
     if (valueTypes.size() > 1) {
       result.addWarning(context + " contains mixed value types - may cause matching issues");
+    }
+  }
+
+  /**
+   * Validates claim_sets per OID4VP spec: array of arrays of claim ID strings.
+   * Each inner array references claim IDs defined in the 'claims' array.
+   */
+  private static void validateClaimSets(List<List<String>> claimSets,
+      List<DCQLQuery.ClaimQuery> claims, String context, ValidationResult result) {
+
+    if (claimSets.isEmpty()) {
+      result.addError(context + ".claim_sets cannot be empty");
+      return;
+    }
+
+    if (claims == null || claims.isEmpty()) {
+      result.addError(context + ".claim_sets requires 'claims' to be defined with IDs");
+      return;
+    }
+
+    // Collect all available claim IDs
+    Set<String> availableClaimIds = new HashSet<>();
+    for (DCQLQuery.ClaimQuery claim : claims) {
+      if (claim.getId() != null) {
+        availableClaimIds.add(claim.getId());
+      }
+    }
+
+    if (availableClaimIds.isEmpty()) {
+      result.addError(context + ".claim_sets requires claims to have 'id' fields");
+      return;
+    }
+
+    for (int i = 0; i < claimSets.size(); i++) {
+      List<String> claimSet = claimSets.get(i);
+      String setContext = context + ".claim_sets[" + i + "]";
+
+      if (claimSet == null || claimSet.isEmpty()) {
+        result.addError(setContext + " cannot be null or empty");
+        continue;
+      }
+
+      for (String claimId : claimSet) {
+        if (!availableClaimIds.contains(claimId)) {
+          result.addError(setContext + " references undefined claim ID: " + claimId);
+        }
+      }
     }
   }
 
@@ -250,8 +323,41 @@ public class DCQLQueryValidator {
     }
   }
 
-  private static void validateConsistency(DCQLQuery dcqlQuery, ValidationResult result) {
+  /**
+   * Validates trusted_authorities per OID4VP spec section 6.1.1.
+   */
+  private static void validateTrustedAuthorities(List<DCQLQuery.TrustedAuthority> authorities,
+      String context, ValidationResult result) {
 
+    if (authorities.isEmpty()) {
+      result.addWarning(context + ".trusted_authorities is empty");
+      return;
+    }
+
+    for (int i = 0; i < authorities.size(); i++) {
+      DCQLQuery.TrustedAuthority authority = authorities.get(i);
+      String authContext = context + ".trusted_authorities[" + i + "]";
+
+      if (authority == null) {
+        result.addError(authContext + " is null");
+        continue;
+      }
+
+      if (authority.getType() == null || authority.getType().trim().isEmpty()) {
+        result.addError(authContext + ".type is required");
+      } else if (!TRUSTED_AUTHORITY_TYPES.contains(authority.getType())) {
+        result.addWarning(authContext + ".type '" + authority.getType()
+            + "' is not a recognized type. Known types: " + TRUSTED_AUTHORITY_TYPES);
+      }
+
+      if (authority.getValues() == null || authority.getValues().isEmpty()) {
+        result.addError(authContext + ".values is required and cannot be empty");
+      }
+    }
+  }
+
+  private static void validateConsistency(DCQLQuery dcqlQuery, ValidationResult result) {
+    // Additional consistency checks can be added here
   }
 
   private static void validateRequiredField(String value, String fieldName, String context,
@@ -262,7 +368,6 @@ public class DCQLQueryValidator {
   }
 
   private static void validateCredentialId(String id, String context, ValidationResult result) {
-
     if (!id.matches("^[a-zA-Z0-9_-]+$")) {
       result.addError(
           context + ".id must contain only alphanumeric characters, underscores, and hyphens");
@@ -270,10 +375,8 @@ public class DCQLQueryValidator {
   }
 
   private static void validateFormat(String format, String context, ValidationResult result) {
-
     Set<String> supportedFormats = CredentialAdapterRegistry.getInstance().getAllSupportedFormats();
 
-    // Also accept common formats that may be added later
     Set<String> knownFormats = new HashSet<>(supportedFormats);
     knownFormats.addAll(Set.of("jwt_vc_json", "jwt_vc", "ldp_vc", "mso_mdoc"));
 
@@ -295,24 +398,11 @@ public class DCQLQueryValidator {
         result.addError(context + ".meta.vct_values must be an array");
       }
     }
-  }
 
-  private static void validateCredentialClaimSets(List<DCQLQuery.ClaimSet> claimSets,
-      String context, ValidationResult result) {
-
-    if (claimSets.isEmpty()) {
-      result.addError(context + ".claim_sets cannot be empty");
-    }
-
-    for (int i = 0; i < claimSets.size(); i++) {
-      DCQLQuery.ClaimSet claimSet = claimSets.get(i);
-      if (claimSet == null) {
-        result.addError(context + ".claim_sets[" + i + "] cannot be null");
-        continue;
-      }
-
-      if (claimSet.getClaims() == null || claimSet.getClaims().isEmpty()) {
-        result.addError(context + ".claim_sets[" + i + "].claims cannot be null or empty");
+    if (meta.containsKey("doctype_value")) {
+      Object doctypeValue = meta.get("doctype_value");
+      if (!(doctypeValue instanceof String)) {
+        result.addError(context + ".meta.doctype_value must be a string");
       }
     }
   }

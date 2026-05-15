@@ -29,6 +29,18 @@ bootJar {
 
 jar {
     enabled = true
+    from {
+        configurations.runtimeClasspath.findAll { it.name.endsWith('jar') }.collect { zipTree(it) }
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/LICENSE*', 'META-INF/NOTICE*'
+    exclude 'org/springframework/**'
+    exclude 'org/apache/**'
+    exclude 'org/slf4j/**'
+    exclude 'ch/qos/logback/**'
+
+    archiveClassifier.set('')
 }
 
 configurations {
@@ -50,6 +62,9 @@ dependencies {
 
     // JSON
     implementation 'com.google.code.gson:gson:2.10.1'
+
+    // CBOR (for mDoc/mDL credential support)
+    implementation 'com.upokecenter:cbor:5.0.0-alpha2'
 
     // Lombok
     compileOnly 'org.projectlombok:lombok'

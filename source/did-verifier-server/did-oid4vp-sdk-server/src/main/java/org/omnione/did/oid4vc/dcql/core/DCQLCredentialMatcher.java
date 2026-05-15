@@ -32,7 +32,7 @@ import org.omnione.did.oid4vc.dcql.exception.DCQLException;
 
 /**
  * Format-agnostic credential matcher for DCQL queries.
- * Uses CredentialAdapter to support multiple credential formats.
+ * Delegates format-specific operations to CredentialAdapter implementations.
  */
 @Slf4j
 public class DCQLCredentialMatcher {
@@ -41,9 +41,6 @@ public class DCQLCredentialMatcher {
 
   /**
    * Checks if the required format is supported.
-   *
-   * @param requiredFormat the format to check
-   * @return true if the format is supported or null
    */
   public static boolean matchesFormat(String requiredFormat) {
     if (requiredFormat == null) {
@@ -51,20 +48,15 @@ public class DCQLCredentialMatcher {
     }
 
     boolean isSupported = registry.isFormatSupported(requiredFormat);
-
     if (!isSupported) {
       log.info("Unsupported format: {}", requiredFormat);
     }
-
     return isSupported;
   }
 
   /**
    * Checks if the credential matches the metadata requirements.
-   *
-   * @param credential the parsed credential
-   * @param metadata the metadata requirements
-   * @return true if the credential matches
+   * Delegates to the format-specific adapter.
    */
   public static boolean matchesMetadata(ParsedCredential credential, Map<String, Object> metadata) {
     if (metadata == null || metadata.isEmpty()) {
@@ -81,11 +73,80 @@ public class DCQLCredentialMatcher {
   }
 
   /**
-   * Extracts matching claim names based on DCQL query.
+   * Checks if the credential's issuer matches any of the trusted authorities.
+   * Delegates to the format-specific adapter.
+   */
+  public static boolean matchesTrustedAuthorities(ParsedCredential credential,
+      List<DCQLQuery.TrustedAuthority> trustedAuthorities) {
+
+    if (trustedAuthorities == null || trustedAuthorities.isEmpty()) {
+      return true;
+    }
+
+    Optional<CredentialAdapter> adapterOpt = registry.findAdapter(credential.getFormat());
+    if (adapterOpt.isEmpty()) {
+      log.warn("No adapter found for format: {}", credential.getFormat());
+      return false;
+    }
+
+    return adapterOpt.get().matchesTrustedAuthorities(credential, trustedAuthorities);
+  }
+
+  /**
+   * Verifies claim-level DCQL constraints against a parsed credential.
    *
-   * @param dcqlQuery the DCQL query
-   * @param credential the parsed credential
-   * @return set of matching claim names
+   * <p>Each {@code ClaimQuery} is evaluated independently via the format-specific
+   * adapter's {@code extractMatchingClaims}. A claim is considered satisfied when
+   * the adapter returns a non-empty match set for it.
+   *
+   * <p>{@code claim_sets} is not evaluated here; callers that need claim_sets
+   * semantics must handle it separately.
+   *
+   * @return {@code null} if all claim queries are satisfied, otherwise a short
+   *     human-readable descriptor of the first unsatisfied claim query
+   */
+  public static String verifyClaimConstraints(ParsedCredential credential,
+      List<DCQLQuery.ClaimQuery> claimQueries) throws DCQLException {
+
+    if (claimQueries == null || claimQueries.isEmpty()) {
+      return null;
+    }
+
+    Optional<CredentialAdapter> adapterOpt = registry.findAdapter(credential.getFormat());
+    if (adapterOpt.isEmpty()) {
+      throw new DCQLException("No adapter registered for format: " + credential.getFormat());
+    }
+    CredentialAdapter adapter = adapterOpt.get();
+
+    for (DCQLQuery.ClaimQuery claimQuery : claimQueries) {
+      Set<String> matched = adapter.extractMatchingClaims(
+          credential, Collections.singletonList(claimQuery));
+
+      if (matched == null || matched.isEmpty()) {
+        String descriptor = describeClaimQuery(claimQuery);
+        log.debug("DCQL claim verification failed for {}", descriptor);
+        return descriptor;
+      }
+    }
+    return null;
+  }
+
+  private static String describeClaimQuery(DCQLQuery.ClaimQuery claimQuery) {
+    if (claimQuery.getNamespace() != null && claimQuery.getClaimName() != null) {
+      return claimQuery.getNamespace() + "." + claimQuery.getClaimName();
+    }
+    if (claimQuery.getPath() != null) {
+      return "path=" + claimQuery.getPath();
+    }
+    if (claimQuery.getId() != null) {
+      return "id=" + claimQuery.getId();
+    }
+    return "<unknown claim>";
+  }
+
+  /**
+   * Extracts matching claim names based on DCQL query.
+   * Delegates format-specific claim matching to the appropriate adapter.
    */
   public static Set<String> extractMatchingClaimNames(DCQLQuery dcqlQuery, ParsedCredential credential) {
     if (dcqlQuery == null || dcqlQuery.getCredentials() == null || credential == null) {
@@ -93,12 +154,11 @@ public class DCQLCredentialMatcher {
     }
 
     Set<String> matchingClaims = new HashSet<>();
-    Map<String, Object> allClaims = credential.getAllClaims();
 
     dcqlQuery.getCredentials().forEach(credentialQuery -> {
       if (credentialQuery.getClaims() == null) {
-        matchingClaims.addAll(allClaims.keySet());
-        log.info("credential.claims is null, including all claims: {}", allClaims.keySet());
+        matchingClaims.addAll(credential.getAllClaims().keySet());
+        log.info("credential.claims is null, including all claims: {}", credential.getAllClaims().keySet());
         return;
       }
 
@@ -107,28 +167,56 @@ public class DCQLCredentialMatcher {
         return;
       }
 
-      credentialQuery.getClaims().forEach(claimQuery -> {
-        List<Object> path = claimQuery.getPath();
+      // Resolve effective claims considering claim_sets
+      List<DCQLQuery.ClaimQuery> effectiveClaims =
+          resolveEffectiveClaims(credentialQuery.getClaims(), credentialQuery.getClaimSets());
 
-        if (path == null || path.isEmpty()) {
-          log.info("Claim path is empty or null");
-          return;
-        }
-
-        processPathAndCollectClaims(allClaims, path, claimQuery, matchingClaims);
-      });
+      // Delegate to adapter for format-specific matching
+      Optional<CredentialAdapter> adapterOpt = registry.findAdapter(credentialQuery.getFormat());
+      if (adapterOpt.isPresent()) {
+        matchingClaims.addAll(
+            adapterOpt.get().extractMatchingClaims(credential, effectiveClaims));
+      } else {
+        // Fallback: use path-based matching
+        log.warn("No adapter for format '{}', using path-based fallback", credentialQuery.getFormat());
+        matchingClaims.addAll(
+            ClaimMatchingHelper.extractMatchingClaimsByPath(credential.getAllClaims(), effectiveClaims));
+      }
     });
 
     return matchingClaims;
   }
 
   /**
+   * Resolves effective claims considering claim_sets.
+   * If claim_sets is defined, returns claims referenced by any claim_set.
+   * Otherwise returns all claims.
+   */
+  private static List<DCQLQuery.ClaimQuery> resolveEffectiveClaims(
+      List<DCQLQuery.ClaimQuery> claims, List<List<String>> claimSets) {
+
+    if (claimSets == null || claimSets.isEmpty()) {
+      return claims;
+    }
+
+    // Collect all claim IDs referenced by any claim_set
+    Set<String> allReferencedIds = new HashSet<>();
+    for (List<String> claimSet : claimSets) {
+      allReferencedIds.addAll(claimSet);
+    }
+
+    List<DCQLQuery.ClaimQuery> resolved = new ArrayList<>();
+    for (DCQLQuery.ClaimQuery claim : claims) {
+      if (claim.getId() != null && allReferencedIds.contains(claim.getId())) {
+        resolved.add(claim);
+      }
+    }
+
+    return resolved.isEmpty() ? claims : resolved;
+  }
+
+  /**
    * Parses a raw credential string using the appropriate adapter.
-   *
-   * @param rawCredential the raw credential string
-   * @param format the credential format (optional, will be auto-detected if null)
-   * @return the parsed credential
-   * @throws DCQLException if parsing fails
    */
   public static ParsedCredential parseCredential(String rawCredential, String format) throws DCQLException {
     Optional<CredentialAdapter> adapterOpt;
@@ -146,181 +234,49 @@ public class DCQLCredentialMatcher {
     return adapterOpt.get().parse(rawCredential);
   }
 
-  // ========== Private Helper Methods ==========
+  /**
+   * Validates that a set of presented credential IDs satisfies at least one option
+   * in each required credential_set.
+   *
+   * @param credentialSets the credential_sets from the DCQL query
+   * @param presentedCredentialIds the set of credential IDs actually presented
+   * @return list of error messages; empty if valid
+   */
+  public static List<String> validateCredentialSetsSatisfied(
+      List<DCQLQuery.CredentialSet> credentialSets,
+      Set<String> presentedCredentialIds) {
 
-  private static void processPathAndCollectClaims(Map<String, Object> allClaims, List<Object> path,
-      DCQLQuery.ClaimQuery claimQuery, Set<String> matchingClaims) {
-
-    if (path.isEmpty() || !(path.get(0) instanceof String)) {
-      log.info("Invalid path: first element must be a string (top-level claim)");
-      return;
+    if (credentialSets == null || credentialSets.isEmpty()) {
+      return Collections.emptyList();
     }
 
-    String topLevelClaim = (String) path.get(0);
-    Object rootValue = allClaims.get(topLevelClaim);
+    List<String> errors = new ArrayList<>();
 
-    log.info("Processing path: {}, topLevelClaim: {}, rootValue type: {}", path, topLevelClaim,
-        rootValue != null ? rootValue.getClass().getSimpleName() : "null");
+    for (DCQLQuery.CredentialSet credentialSet : credentialSets) {
+      // Default required = true per spec
+      boolean required = credentialSet.getRequired() == null || credentialSet.getRequired();
 
-    if (rootValue == null) {
-      log.info("Top-level claim not found: {}", topLevelClaim);
-      return;
-    }
-
-    if (path.size() == 1) {
-      if (meetsClaimConditions(claimQuery, rootValue)) {
-        matchingClaims.add(topLevelClaim);
-        log.info("Single-level path matched: {} = {}", topLevelClaim, rootValue);
-      } else {
-        log.info("Single-level path condition not met: {} = {}", topLevelClaim, rootValue);
-      }
-      return;
-    }
-
-    List<Object> remainingPath = new ArrayList<>(path.subList(1, path.size()));
-    log.info("Multi-depth path detected: {} with remaining path: {}", topLevelClaim, remainingPath);
-    collectMatchingValuesFromPath(rootValue, remainingPath, claimQuery, topLevelClaim, matchingClaims);
-  }
-
-  private static void collectMatchingValuesFromPath(Object current, List<Object> remainingPath,
-      DCQLQuery.ClaimQuery claimQuery, String claimNamePrefix, Set<String> matchingClaims) {
-
-    log.info("collectMatchingValuesFromPath: claimNamePrefix={}, remainingPath={}, currentType={}",
-        claimNamePrefix, remainingPath,
-        current != null ? current.getClass().getSimpleName() : "null");
-
-    if (remainingPath.isEmpty()) {
-      log.info("End of path reached for: {}, value: {}", claimNamePrefix, current);
-      if (meetsClaimConditions(claimQuery, current)) {
-        matchingClaims.add(claimNamePrefix);
-        log.info("Deep path matched: {} = {}", claimNamePrefix, current);
-      }
-      return;
-    }
-
-    Object nextPathElement = remainingPath.get(0);
-    List<Object> nextRemaining = new ArrayList<>(remainingPath.subList(1, remainingPath.size()));
-
-    if (nextPathElement == null) {
-      if (!(current instanceof List)) {
-        log.info("Wildcard path element (null) but current is not a list");
-        return;
+      if (!required) {
+        log.debug("Skipping non-required credential_set: {}", credentialSet.getId());
+        continue;
       }
 
-      List<?> currentList = (List<?>) current;
-      for (int i = 0; i < currentList.size(); i++) {
-        Object item = currentList.get(i);
-        String newClaimName = claimNamePrefix + "[" + i + "]";
-        collectMatchingValuesFromPath(item, nextRemaining, claimQuery, newClaimName, matchingClaims);
-      }
-      return;
-    }
-
-    if (nextPathElement instanceof Integer) {
-      if (!(current instanceof List)) {
-        log.info("Integer index but current is not a list");
-        return;
+      boolean anySatisfied = false;
+      for (List<String> option : credentialSet.getOptions()) {
+        if (presentedCredentialIds.containsAll(option)) {
+          anySatisfied = true;
+          break;
+        }
       }
 
-      int idx = (Integer) nextPathElement;
-      List<?> currentList = (List<?>) current;
-
-      if (idx < 0 || idx >= currentList.size()) {
-        log.info("Index out of bounds: {} (list size: {})", idx, currentList.size());
-        return;
-      }
-
-      Object element = currentList.get(idx);
-      String newClaimName = claimNamePrefix + "[" + idx + "]";
-      collectMatchingValuesFromPath(element, nextRemaining, claimQuery, newClaimName, matchingClaims);
-      return;
-    }
-
-    if (nextPathElement instanceof String) {
-      if (!(current instanceof Map)) {
-        log.info("String key but current is not a map: type={}, value={}",
-            current.getClass().getSimpleName(), current);
-        return;
-      }
-
-      Map<?, ?> currentMap = (Map<?, ?>) current;
-      String key = (String) nextPathElement;
-
-      log.info("Searching for key '{}' in map with keys: {}", key, currentMap.keySet());
-
-      Object nextValue = currentMap.get(key);
-      if (nextValue == null) {
-        log.info("Key not found in map: {} (available keys: {})", key, currentMap.keySet());
-        return;
-      }
-
-      String newClaimName = claimNamePrefix + "." + key;
-      log.info("Found nested value at path '{}': {}", newClaimName, nextValue);
-      collectMatchingValuesFromPath(nextValue, nextRemaining, claimQuery, newClaimName, matchingClaims);
-    }
-  }
-
-  private static boolean meetsClaimConditions(DCQLQuery.ClaimQuery claimQuery, Object actualValue) {
-    if (actualValue == null) {
-      return false;
-    }
-
-    if (claimQuery.getValues() != null && !claimQuery.getValues().isEmpty()) {
-      boolean valueMatches = claimQuery.getValues().contains(actualValue);
-      log.info("  values condition: {} in {} = {}", actualValue, claimQuery.getValues(), valueMatches);
-      if (!valueMatches) {
-        return false;
+      if (!anySatisfied) {
+        String setId = credentialSet.getId() != null ? credentialSet.getId() : "(unnamed)";
+        errors.add("credential_set '" + setId
+            + "' not satisfied: none of its options are fully covered by presented credentials "
+            + presentedCredentialIds);
       }
     }
 
-    if (claimQuery.getValue() != null) {
-      boolean exactMatch = claimQuery.getValue().equals(actualValue);
-      log.info("  value condition: {} == {} = {}", actualValue, claimQuery.getValue(), exactMatch);
-      if (!exactMatch) {
-        return false;
-      }
-    }
-
-    if (claimQuery.getMin() != null) {
-      if (!checkMinCondition(actualValue, claimQuery.getMin())) {
-        return false;
-      }
-    }
-
-    if (claimQuery.getMax() != null) {
-      if (!checkMaxCondition(actualValue, claimQuery.getMax())) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  private static boolean checkMinCondition(Object actualValue, Object minValue) {
-    if (actualValue instanceof Number && minValue instanceof Number) {
-      double actual = ((Number) actualValue).doubleValue();
-      double min = ((Number) minValue).doubleValue();
-      return actual >= min;
-    }
-
-    if (actualValue instanceof String && minValue instanceof String) {
-      return ((String) actualValue).compareTo((String) minValue) >= 0;
-    }
-
-    return true;
-  }
-
-  private static boolean checkMaxCondition(Object actualValue, Object maxValue) {
-    if (actualValue instanceof Number && maxValue instanceof Number) {
-      double actual = ((Number) actualValue).doubleValue();
-      double max = ((Number) maxValue).doubleValue();
-      return actual <= max;
-    }
-
-    if (actualValue instanceof String && maxValue instanceof String) {
-      return ((String) actualValue).compareTo((String) maxValue) <= 0;
-    }
-
-    return true;
+    return errors;
   }
 }

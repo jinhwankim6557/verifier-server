@@ -16,8 +16,10 @@
 
 package org.omnione.did.oid4vc.dcql.core.credential;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.omnione.did.oid4vc.dcql.datamodel.DCQLQuery;
 import org.omnione.did.oid4vc.dcql.exception.DCQLException;
 
 /**
@@ -75,4 +77,30 @@ public interface CredentialAdapter {
      * @return set of reserved claim names
      */
     Set<String> getReservedClaimNames();
+
+    /**
+     * Extracts matching claim names from the credential based on DCQL claim queries.
+     * Each adapter implements format-specific claim matching logic:
+     * - JSON-based (SD-JWT, W3C VC): path-based navigation
+     * - mdoc: namespace + claim_name matching
+     *
+     * @param credential the parsed credential
+     * @param claimQueries the claim queries to match against
+     * @return set of matching claim names (qualified names for mdoc, path-based for JSON)
+     */
+    Set<String> extractMatchingClaims(ParsedCredential credential, List<DCQLQuery.ClaimQuery> claimQueries);
+
+    /**
+     * Checks if the credential's issuer matches any of the trusted authorities.
+     * Each adapter implements format-specific issuer identification:
+     * - SD-JWT: iss claim, x5c header SAN
+     * - mdoc: MSO certificate x5c, AKI
+     * - W3C VC: issuer field
+     *
+     * @param credential the parsed credential
+     * @param trustedAuthorities list of trusted authority constraints
+     * @return true if at least one authority matches, or if authorities list is null/empty
+     */
+    boolean matchesTrustedAuthorities(ParsedCredential credential,
+        List<DCQLQuery.TrustedAuthority> trustedAuthorities);
 }
