@@ -129,6 +129,7 @@ public class ZkpProofVerificationProtocolImpl implements ZkpProofVerificationPro
                 .type("VerifyProfile")
                 .title(policy.getTitle())
                 .description(policy.getDescription())
+                .language(policy.getLanguage())
                 .profile(ZkpInnerProfile.builder()
                     .verifier(verifierInfoProvider.getVerifierInfo())
                     .proofRequest(proofRequest)

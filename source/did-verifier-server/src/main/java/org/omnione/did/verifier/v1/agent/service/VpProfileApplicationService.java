@@ -277,6 +277,7 @@ public class VpProfileApplicationService {
                     .policyId(vpPolicyId)
                     .title(zkpPolicyProfile.getTitle())
                     .description(zkpPolicyProfile.getDescription())
+                    .language(zkpPolicyProfile.getLanguage())
                     .name(zkpProofRequest.getName())
                     .version(zkpProofRequest.getVersion())
                     .requestedAttributes(zkpProofRequest.getRequestedAttributes())

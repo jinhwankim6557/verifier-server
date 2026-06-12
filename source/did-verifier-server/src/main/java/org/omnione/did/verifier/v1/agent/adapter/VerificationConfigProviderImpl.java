@@ -12,10 +12,8 @@ import org.omnione.did.base.db.repository.PolicyProfileRepository;
 import org.omnione.did.base.db.repository.VpFilterRepository;
 import org.omnione.did.base.db.repository.VpProcessRepository;
 import org.omnione.did.verifier.v1.common.PolicyCacheService;
-import org.omnione.did.base.property.VerifierProperty;
 import org.omnione.did.data.model.profile.Filter;
 import org.omnione.did.data.model.profile.verify.VerifyProcess;
-import org.omnione.did.data.model.provider.ProviderDetail;
 import org.omnione.did.data.model.vc.CredentialSchema;
 import org.omnione.did.verifier.v1.provider.VerificationConfigProvider;
 import org.omnione.did.verifier.v1.model.policy.VerificationPolicy;
@@ -31,7 +29,7 @@ import java.util.List;
  * SDK VerificationConfigProvider 구현체 (Adapter 패턴)
  *
  * DB에서 Policy, Filter, Process 정보를 조회하여 SDK DTO(VerificationPolicy)로 변환합니다.
- * 변환된 DTO의 filter, process, verifier 필드는 Core 라이브러리 타입을 직접 사용합니다.
+ * 변환된 DTO의 filter, process 필드는 Core 라이브러리 타입을 직접 사용합니다.
  *
  * 설계 원칙:
  * - 어댑터는 변환만 담당 (비즈니스 로직 없음)
@@ -48,7 +46,6 @@ public class VerificationConfigProviderImpl implements VerificationConfigProvide
     private final VpFilterRepository vpFilterRepository;
     private final VpProcessRepository vpProcessRepository;
     private final PayloadRepository payloadRepository;
-    private final VerifierProperty verifierProperty;
     private final ObjectMapper objectMapper;
 
     /**
@@ -130,7 +127,7 @@ public class VerificationConfigProviderImpl implements VerificationConfigProvide
 
     /**
      * Policy, PolicyProfile, VpFilter, VpProcess, Payload를 VerificationPolicy DTO로 조립
-     * filter, process, verifier는 Core 라이브러리 타입으로 직접 구성
+     * filter, process는 Core 라이브러리 타입으로 직접 구성
      */
     private VerificationPolicy buildVerificationPolicy(
             Policy policy,
@@ -150,7 +147,6 @@ public class VerificationConfigProviderImpl implements VerificationConfigProvide
                 // Core 타입으로 직접 구성 (SDK 중간 DTO 없음)
                 .filter(buildFilter(vpFilter))
                 .process(buildVerifyProcess(vpProcess))
-                .verifier(buildProviderDetail())
                 .build();
     }
 
@@ -204,17 +200,5 @@ public class VerificationConfigProviderImpl implements VerificationConfigProvide
                 : Collections.emptyList());
         process.setAuthType(vpProcess.getAuthType());
         return process;
-    }
-
-    /**
-     * Verifier 정보 → Core ProviderDetail (application.yml에서 로드)
-     */
-    private ProviderDetail buildProviderDetail() {
-        ProviderDetail provider = new ProviderDetail();
-        provider.setDid(verifierProperty.getDid());
-        provider.setName(verifierProperty.getName());
-        provider.setCertVcRef(verifierProperty.getCertVcRef());
-        provider.setRef(verifierProperty.getRef());
-        return provider;
     }
 }

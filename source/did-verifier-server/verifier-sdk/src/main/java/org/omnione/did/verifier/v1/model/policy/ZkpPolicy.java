@@ -38,6 +38,7 @@ public class ZkpPolicy {
     private String policyId;
     private String title;
     private String description;
+    private String language;  // Profile 표시 언어 (Admin 설정값)
     private String name;  // ProofRequest.name
     private String version;  // ProofRequest.version
     private String requestedAttributes;  // JSON 문자열

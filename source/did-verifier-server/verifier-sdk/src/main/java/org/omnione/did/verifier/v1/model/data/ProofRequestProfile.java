@@ -39,6 +39,7 @@ public class ProofRequestProfile {
     private String type;
     private String title;
     private String description;
+    private String language;
     private ZkpInnerProfile profile;
     private Object proof;
 }

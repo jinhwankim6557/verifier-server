@@ -18,8 +18,10 @@ package org.omnione.did.verifier.v1.agent.adapter;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.omnione.did.base.db.domain.VerifierInfo;
 import org.omnione.did.base.property.VerifierProperty;
 import org.omnione.did.data.model.provider.ProviderDetail;
+import org.omnione.did.verifier.v1.admin.service.VerifierInfoQueryService;
 import org.omnione.did.verifier.v1.provider.VerifierInfoProvider;
 import org.omnione.did.verifier.v1.exception.VerifierSdkException;
 import org.omnione.did.verifier.v1.exception.VerifierSdkErrorCode;
@@ -30,7 +32,7 @@ import org.springframework.stereotype.Component;
  * VerifierInfoProvider의 구현체 (Adapter 패턴)
  *
  * 목적:
- * - application.yml에서 로드된 Verifier 설정 정보를 SDK Interface로 제공
+ * - Admin 설정값(DB)으로 저장된 Verifier 정보를 SDK Interface로 제공
  * - StorageService를 통해 Verifier DID Document 조회
  *
  * 설계 원칙:
@@ -38,7 +40,8 @@ import org.springframework.stereotype.Component;
  * - 어댑터는 변환만 담당 (비즈니스 로직 없음)
  *
  * 의존성:
- * - VerifierProperty: application.yml의 verifier.* 설정
+ * - VerifierInfoQueryService: DB(verifier 테이블)에 저장된 Admin 설정값 조회
+ * - VerifierProperty: application.yml의 verifier.* 설정 (DID Document 조회 보조용)
  * - StorageService: DID Document 조회용
  */
 @Slf4j
@@ -46,11 +49,15 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class VerifierInfoProviderImpl implements VerifierInfoProvider {
 
+    private final VerifierInfoQueryService verifierInfoQueryService;
     private final VerifierProperty verifierProperty;
     private final StorageService storageService;
 
     /**
      * Verifier 기본 정보 조회
+     *
+     * Admin 설정값(DB의 verifier 테이블)을 기준으로 구성합니다.
+     * 매핑 규칙은 Admin 화면 표시 경로(PolicyProfileService)와 동일합니다.
      *
      * @return ProviderDetail (Core, DID, 이름, certVcRef, 참조 URL 등)
      * @throws VerifierSdkException Verifier 설정이 없거나 불완전한 경우
@@ -60,28 +67,31 @@ public class VerifierInfoProviderImpl implements VerifierInfoProvider {
         log.debug("=== VerifierInfoProviderAdapter.getVerifierInfo 시작 ===");
 
         try {
-            String did = verifierProperty.getDid();
-            String name = verifierProperty.getName();
+            // Admin 설정값(DB) 조회 (application-verifier.yml 미참조)
+            VerifierInfo verifierInfo = verifierInfoQueryService.getVerifierInfo();
+
+            String did = verifierInfo.getDid();
+            String name = verifierInfo.getName();
 
             if (did == null || did.isBlank()) {
                 log.error("Verifier DID가 설정되지 않았습니다.");
                 throw new VerifierSdkException(
                         VerifierSdkErrorCode.SDK_VERIFIER_INFO_NOT_FOUND,
-                        "Verifier DID is not configured in application.yml");
+                        "Verifier DID is not configured (DB)");
             }
 
             if (name == null || name.isBlank()) {
                 log.warn("Verifier name이 설정되지 않았습니다. DID를 name으로 사용합니다.");
             }
 
-            // Core ProviderDetail 구성 (필드 직접 매핑)
+            // Core ProviderDetail 구성 (Admin 화면과 동일한 매핑: PolicyProfileService 참조)
             ProviderDetail providerDetail = new ProviderDetail();
             providerDetail.setDid(did);
-            providerDetail.setCertVcRef(verifierProperty.getCertVcRef());
             providerDetail.setName(name != null && !name.isBlank() ? name : did);
-            providerDetail.setRef(verifierProperty.getRef());
+            providerDetail.setCertVcRef(verifierInfo.getCertificateUrl());
+            providerDetail.setRef(verifierInfo.getServerUrl());
 
-            log.debug("Verifier 정보 조회 성공: DID={}, Name={}", did, name);
+            log.debug("Verifier 정보 조회 성공(DB): DID={}, Name={}", did, name);
             return providerDetail;
 
         } catch (VerifierSdkException e) {
