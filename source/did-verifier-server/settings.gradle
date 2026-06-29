@@ -3,5 +3,6 @@ rootProject.name = 'did-verifier-server'
 // Verifier SDK를 Composite Build로 포함
 includeBuild('verifier-sdk')
 
-// OID4VP SDK를 Composite Build로 포함
-includeBuild('did-oid4vp-sdk-server')
+// OID4VP SDK는 libs/의 fatjar(did-oid4vp-sdk-server-3.0.0.jar)로 사용한다.
+// (composite build로 포함하면 libs fatjar와 충돌하여 fatjar가 무시됨)
+// includeBuild('did-oid4vp-sdk-server')

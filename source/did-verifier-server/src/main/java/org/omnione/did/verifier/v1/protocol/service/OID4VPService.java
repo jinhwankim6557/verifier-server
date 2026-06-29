@@ -18,6 +18,7 @@ import org.omnione.did.base.util.BaseCoreDidUtil;
 import org.omnione.did.data.model.did.DidDocument;
 import org.omnione.did.data.model.did.VerificationMethod;
 import org.omnione.did.oid4vc.oid4vp.dto.ServiceResult;
+import org.omnione.did.oid4vc.oid4vp.exception.OID4VPException;
 import org.omnione.did.oid4vc.oid4vp.service.AuthorizationService;
 import org.omnione.did.oid4vc.oid4vp.service.OID4VPHelperService;
 import org.omnione.did.oid4vc.oid4vp.util.crypto.MultibaseUtils;
@@ -101,7 +102,8 @@ public class OID4VPService {
         String verificationMethod = verifierDidDoc.getId() + "?versionId=" + verifierDidDoc.getVersionId() + "#" + vm.getId();
         String publicKeyMultibase = vm.getPublicKeyMultibase();
 
-        CompactSigner compactSigner = (kid, hash) -> fileWalletService.generateCompactSignature(kid, hash);
+        // CompactSigner는 이미 SHA-256된 hash를 넘기므로 재해시 없는 FromHash로 서명한다(이중 해시 방지).
+        CompactSigner compactSigner = (kid, hash) -> fileWalletService.generateCompactSignatureFromHash(kid, hash);
 
         return authorizationService.getAuthorizationRequest(
                 requestId, compactSigner, verificationMethod, publicKeyMultibase);
@@ -150,7 +152,9 @@ public class OID4VPService {
                     .orElseThrow(() -> new OpenDidException(ErrorCode.OID4VP_SESSION_MAPPING_NOT_FOUND));
 
             String dcqlQuery = oid4vpSession.getDcqlQuery();
-            Map<String, List<Object>> vpTokenMap = buildVpTokenMap(dcqlQuery, request.getVpToken());
+            // vp_token은 DCQL 응답 형식({credentialId: [VP, ...]})이므로 SDK 파서로 그대로 해석한다.
+            // (자체 매핑 시 vp_token 전체를 다시 credentialId 키에 넣어 이중 래핑되는 문제가 있었음)
+            Map<String, List<Object>> vpTokenMap = oid4VPHelperService.parseVPToken(request.getVpToken());
             log.debug("vpTokenMap keys: {}", vpTokenMap.keySet());
 
             boolean hasMdoc = containsMdocFormat(dcqlQuery);
@@ -211,6 +215,17 @@ public class OID4VPService {
             vpSubmitAuditService.recordFailure(transaction.getId(), request.getVpToken(), null, e.getErrorCode().getCode(), null);
             transactionService.updateTransactionStatus(transaction.getId(), TransactionStatus.FAILED);
             throw e;
+        } catch (OID4VPException e) {
+            // vp_token 파싱 등 SDK 처리 실패: 실패로 기록하고 FAILED 결과 반환(컨트롤러에서 500으로 변환)
+            log.error("OID4VP response failed: {} - {}", e.getErrorCode(), e.getErrorMsg(), e);
+            vpSubmitAuditService.recordFailure(transaction.getId(), request.getVpToken(), null, e.getErrorCode(), null);
+            transactionService.updateTransactionStatus(transaction.getId(), TransactionStatus.FAILED);
+            return Oid4vpResponseResult.builder()
+                    .sessionId(mapping.getTxId())
+                    .status("FAILED")
+                    .error(e.getErrorCode())
+                    .errorDescription(e.getErrorMsg())
+                    .build();
         }
     }
 
@@ -262,43 +277,6 @@ public class OID4VPService {
         } catch (Exception e) {
             return Optional.empty();
         }
-    }
-
-    /**
-     * DCQL 쿼리의 credentials[].id를 파싱하여 vpTokenMap 구성
-     * - 단일 credential: 해당 id를 키로 vpToken 매핑
-     * - 복수 credential: 모든 id에 동일한 vpToken 매핑 (단일 토큰 제출 시)
-     * - 파싱 실패 시: "default" fallback
-     */
-    private Map<String, List<Object>> buildVpTokenMap(String dcqlQueryJson, String vpToken) {
-        Map<String, List<Object>> vpTokenMap = new LinkedHashMap<>();
-        if (vpToken == null) {
-            return vpTokenMap;
-        }
-
-        if (dcqlQueryJson != null) {
-            try {
-                JsonNode dcql = objectMapper.readTree(dcqlQueryJson);
-                JsonNode credentials = dcql.get("credentials");
-                if (credentials != null && credentials.isArray() && !credentials.isEmpty()) {
-                    for (JsonNode cred : credentials) {
-                        JsonNode idNode = cred.get("id");
-                        if (idNode != null && !idNode.isNull()) {
-                            vpTokenMap.put(idNode.asText(), List.of(vpToken));
-                        }
-                    }
-                    if (!vpTokenMap.isEmpty()) {
-                        return vpTokenMap;
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Failed to parse DCQL query, using 'default' fallback: {}", e.getMessage());
-            }
-        }
-
-        // fallback
-        vpTokenMap.put("default", List.of(vpToken));
-        return vpTokenMap;
     }
 
     /**

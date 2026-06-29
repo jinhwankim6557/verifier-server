@@ -32,6 +32,7 @@ import org.omnione.did.verifier.v1.exception.VerifierSdkException;
 import org.omnione.did.verifier.v1.exception.VerifierSdkErrorCode;
 import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
 import java.util.Base64;
 
 /**
@@ -58,7 +59,7 @@ public class CryptoHelperImpl implements CryptoHelper {
             // Note: VpManager가 내부적으로 서명 검증을 수행하므로
             // 이 메서드는 Phase 1에서 VpVerificationService가 직접 사용하지 않음
             // 하지만 인터페이스 완성도를 위해 구현
-            log.debug("Verifying signature with publicKey: {}", publicKey);
+            log.debug("Verifying signature with publicKey: {}", Arrays.toString(publicKey.getBytes()));
             return true; // VpManager에 위임
         } catch (Exception e) {
             log.error("Failed to verify signature", e);
@@ -212,7 +213,8 @@ public class CryptoHelperImpl implements CryptoHelper {
                     curveType
             );
 
-            log.debug("ECDH shared secret generated successfully");
+            log.debug("ECDH shared secret generated successfully: {}", sharedSecret);
+
             return sharedSecret;
 
         } catch (OpenDidException e) {
@@ -243,7 +245,8 @@ public class CryptoHelperImpl implements CryptoHelper {
                     symmetricCipherType
             );
 
-            log.debug("Session key derived successfully");
+            log.debug("Session key derived successfully" + ": {}", Arrays.toString(sessionKey));
+
             return sessionKey;
 
         } catch (OpenDidException e) {

@@ -97,6 +97,33 @@ public class FileWalletService {
             throw new OpenDidException(ErrorCode.WALLET_SIGNATURE_GENERATION_FAILED);
         }
     }
+
+    /**
+     * 이미 해시된 값으로부터 compact 서명을 생성한다 (재해시 없음).
+     * JWS 등 서명 입력이 이미 SHA-256된 경우(SDK CompactSigner가 넘기는 hash)에 사용한다.
+     * plainText용 generateCompactSignature를 쓰면 내부에서 한 번 더 해시되어 이중 해시가 되므로 구분한다.
+     *
+     * @param keyId Key ID.
+     * @param hash 이미 해시된 서명 입력.
+     * @return Generated signature.
+     * @throws OpenDidException if signature generation fails.
+     */
+    public byte[] generateCompactSignatureFromHash(String keyId, byte[] hash) {
+        try {
+            if (!walletManager.isConnect()) {
+                log.info("Wallet manager disConnect. Connecting to wallet...");
+                connectToWallet();
+            }
+
+            byte[] signature = walletManager.generateCompactSignatureFromHash(keyId, hash);
+            log.info("Compact signature generated from hash for keyId: {}", keyId);
+            return signature;
+        } catch (OpenDidException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new OpenDidException(ErrorCode.WALLET_SIGNATURE_GENERATION_FAILED);
+        }
+    }
     public WalletManagerInterface initializeWalletWithKeys() {
         WalletManagerInterface walletManager = BaseWalletUtil.initializeWalletWithKeys(
                 walletProperty.getFilePath(),

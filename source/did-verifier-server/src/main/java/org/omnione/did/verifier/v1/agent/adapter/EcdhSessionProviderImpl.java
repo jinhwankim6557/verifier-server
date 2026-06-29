@@ -18,6 +18,7 @@ package org.omnione.did.verifier.v1.agent.adapter;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.bouncycastle.util.encoders.Hex;
 import org.omnione.did.base.db.domain.E2e;
 import org.omnione.did.base.db.repository.E2eRepository;
 import org.omnione.did.base.exception.OpenDidException;
@@ -33,6 +34,7 @@ import org.omnione.did.verifier.v1.exception.VerifierSdkErrorCode;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 /**
  * E2E 세션 제공자 어댑터
@@ -301,7 +303,7 @@ public class EcdhSessionProviderImpl implements EcdhSessionProvider {
             // ECDH 프로토콜에서는 공개키가 그대로 전송됨 (암호화되지 않음)
             // AccE2e.publicKey는 Holder의 공개키를 Multibase로 인코딩한 값
             byte[] holderPublicKeyBytes = cryptoHelper.decodeMultibase(encHolderPublicKey);
-            log.debug("Extracted Holder public key");
+            log.debug("Extracted Holder public key: {}", Hex.toHexString(holderPublicKeyBytes));
 
             // 4. ECDH 공유 비밀키 생성 (CryptoHelper 사용)
             byte[] sharedSecret = cryptoHelper.generateSharedSecret(
@@ -309,7 +311,7 @@ public class EcdhSessionProviderImpl implements EcdhSessionProvider {
                     verifierPrivateKeyBytes,
                     e2e.getCurve()
             );
-            log.debug("Generated ECDH shared secret");
+            log.debug("Generated ECDH shared secret : {}",  Hex.toHexString(sharedSecret));
 
             // 5. 세션키 생성 - KDF (CryptoHelper 사용)
             byte[] sessionKey = cryptoHelper.deriveSessionKey(
@@ -317,7 +319,9 @@ public class EcdhSessionProviderImpl implements EcdhSessionProvider {
                     nonceBytes,
                     e2e.getCipher()
             );
-            log.debug("Generated session key from shared secret and nonce");
+            log.debug("Generated session key from shared secret and nonce : {}", Hex.toHexString(sessionKey));
+
+            log.debug("ivBytes: {}", Hex.toHexString(ivBytes));
 
             // 6. VP 복호화 (CryptoHelper 사용)
             byte[] encVpBytes = cryptoHelper.decodeMultibase(encVp);
