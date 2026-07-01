@@ -149,7 +149,14 @@ public enum ErrorCode {
     OID4VP_INITIATION_FAILED("SSRVVRF01305", "Failed to initiate OID4VP verification.", 500),
     OID4VP_SESSION_MAPPING_NOT_FOUND("SSRVVRF01306", "OID4VP session mapping not found.", 400),
     OID4VP_AUTHORIZATION_REQUEST_FAILED("SSRVVRF01307", "Failed to retrieve OID4VP authorization request.", 500),
-    OID4VP_RESPONSE_PROCESSING_FAILED("SSRVVRF01308", "Failed to process OID4VP response.", 500);
+    OID4VP_RESPONSE_PROCESSING_FAILED("SSRVVRF01308", "Failed to process OID4VP response.", 500),
+
+    // Status List Errors (1400~1499)
+    STATUS_LIST_FETCH_FAILED("SSRVVRF01401", "Failed to fetch status list token.", 500),
+    STATUS_LIST_TOKEN_INVALID("SSRVVRF01402", "Status list token validation failed.", 400),
+    STATUS_LIST_CREDENTIAL_INVALID("SSRVVRF01403", "Credential has been revoked.", 400),
+    STATUS_LIST_CREDENTIAL_SUSPENDED("SSRVVRF01404", "Credential is suspended.", 400),
+    STATUS_LIST_INDEX_OUT_OF_BOUNDS("SSRVVRF01405", "Status list index is out of bounds.", 400);
 
 
     private final String code;

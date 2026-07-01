@@ -38,4 +38,14 @@ public class VerifierProperty {
     private String domain;
     private String tasUrl;
     private ArrayList<String> verifierEndPoints = new ArrayList<>();
+
+    @Getter
+    @Setter
+    public static class StatusListProperties {
+        private boolean failOnFetchError = true;
+        private long maxCacheTtlSeconds = 86400;
+        private long minCacheTtlSeconds = 60;
+    }
+
+    private StatusListProperties statusList = new StatusListProperties();
 }
