@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.URI;
 import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -29,6 +30,16 @@ public class StatusListTokenFetcher {
     }
 
     public String fetch(String uri) {
+        URI parsed;
+        try {
+            parsed = URI.create(uri);
+        } catch (IllegalArgumentException e) {
+            throw new OpenDidException(ErrorCode.STATUS_LIST_FETCH_FAILED);
+        }
+        if (!"https".equalsIgnoreCase(parsed.getScheme())) {
+            throw new OpenDidException(ErrorCode.STATUS_LIST_FETCH_FAILED);
+        }
+
         CacheEntry cached = cache.get(uri);
         if (cached != null && cached.expiresAt.isAfter(Instant.now())) {
             log.debug("Status list cache HIT for uri: {}", uri);
