@@ -1,5 +1,6 @@
 package org.omnione.did.verifier.v1.protocol.service.status;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.omnione.did.base.exception.ErrorCode;
 import org.omnione.did.base.exception.OpenDidException;
@@ -15,6 +16,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 @Component
 public class StatusListTokenFetcher {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final RestTemplate restTemplate;
     private final VerifierProperty.StatusListProperties props;
@@ -37,6 +40,10 @@ public class StatusListTokenFetcher {
             ResponseEntity<String> response = restTemplate.exchange(
                     uri, HttpMethod.GET, null, String.class);
             String jwt = response.getBody();
+            if (jwt == null) {
+                log.error("Status list token response body is null for uri: {}", uri);
+                throw new OpenDidException(ErrorCode.STATUS_LIST_FETCH_FAILED);
+            }
             long ttl = parseTtl(jwt);
             cache.put(uri, new CacheEntry(jwt, Instant.now().plusSeconds(ttl)));
             return jwt;
@@ -56,7 +63,7 @@ public class StatusListTokenFetcher {
             String padded = parts[1] + "=".repeat((4 - parts[1].length() % 4) % 4);
             byte[] payloadBytes = java.util.Base64.getUrlDecoder().decode(padded);
             com.fasterxml.jackson.databind.JsonNode node =
-                    new com.fasterxml.jackson.databind.ObjectMapper().readTree(payloadBytes);
+                    OBJECT_MAPPER.readTree(payloadBytes);
             long ttl = node.path("ttl").asLong(0);
             if (ttl <= 0) ttl = props.getMinCacheTtlSeconds();
             return Math.min(Math.max(ttl, props.getMinCacheTtlSeconds()), props.getMaxCacheTtlSeconds());
