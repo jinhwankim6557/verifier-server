@@ -18,9 +18,7 @@ import org.omnione.did.verifier.v1.agent.service.DidDocService;
 import org.springframework.stereotype.Component;
 
 import java.security.interfaces.ECPublicKey;
-import java.security.spec.ECPoint;
 import java.time.Instant;
-import java.util.Base64;
 
 @Slf4j
 @Component
