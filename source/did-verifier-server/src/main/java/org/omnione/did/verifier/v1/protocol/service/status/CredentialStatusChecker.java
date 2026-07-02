@@ -46,9 +46,10 @@ public class CredentialStatusChecker {
         String tokenJwt;
         try {
             tokenJwt = fetcher.fetch(ref.uri());
-        } catch (OpenDidException e) {
+        } catch (RuntimeException e) {
             if (verifierProperty.getStatusList().isFailOnFetchError()) {
-                throw e;
+                if (e instanceof OpenDidException) throw (OpenDidException) e;
+                throw new OpenDidException(ErrorCode.STATUS_LIST_FETCH_FAILED);
             }
             log.warn("Failed to fetch status list (FAIL-OPEN): {}", e.getMessage());
             return;
@@ -68,6 +69,7 @@ public class CredentialStatusChecker {
                     log.warn("Credential SUSPENDED at idx={}, uri={}", ref.idx(), ref.uri());
                     throw new OpenDidException(ErrorCode.STATUS_LIST_CREDENTIAL_SUSPENDED);
                 }
+                case 3 -> log.debug("APPLICATION_SPECIFIC status at idx={}, skipping", ref.idx());
                 default -> log.warn("Unknown status value {} at idx={}, treating as VALID", status, ref.idx());
             }
         } catch (OpenDidException e) {

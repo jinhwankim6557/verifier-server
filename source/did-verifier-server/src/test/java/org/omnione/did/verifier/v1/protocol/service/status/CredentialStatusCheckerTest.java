@@ -6,8 +6,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
 import org.omnione.did.base.exception.ErrorCode;
 import org.omnione.did.base.exception.OpenDidException;
 import org.omnione.did.base.property.VerifierProperty;
@@ -21,7 +19,6 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.LENIENT)
 class CredentialStatusCheckerTest {
 
     @Mock StatusClaimParser parser;
@@ -41,7 +38,6 @@ class CredentialStatusCheckerTest {
     void setUp() {
         props = new VerifierProperty.StatusListProperties();
         props.setFailOnFetchError(true);
-        when(verifierProperty.getStatusList()).thenReturn(props);
         checker = new CredentialStatusChecker(parser, fetcher, tokenVerifier, decoder, verifierProperty);
     }
 
@@ -100,6 +96,7 @@ class CredentialStatusCheckerTest {
     @Test
     @DisplayName("fetch 실패 + failOnFetchError=true 이면 STATUS_LIST_FETCH_FAILED 예외")
     void fetch_failure_with_fail_closed_throws() {
+        when(verifierProperty.getStatusList()).thenReturn(props);
         when(parser.parse(FAKE_SD_JWT)).thenReturn(Optional.of(new StatusListRef(0, URI)));
         when(fetcher.fetch(URI)).thenThrow(new OpenDidException(ErrorCode.STATUS_LIST_FETCH_FAILED));
 
@@ -113,6 +110,7 @@ class CredentialStatusCheckerTest {
     @DisplayName("fetch 실패 + failOnFetchError=false 이면 통과 (FAIL-OPEN)")
     void fetch_failure_with_fail_open_passes() {
         props.setFailOnFetchError(false);
+        when(verifierProperty.getStatusList()).thenReturn(props);
         when(parser.parse(FAKE_SD_JWT)).thenReturn(Optional.of(new StatusListRef(0, URI)));
         when(fetcher.fetch(URI)).thenThrow(new OpenDidException(ErrorCode.STATUS_LIST_FETCH_FAILED));
 
