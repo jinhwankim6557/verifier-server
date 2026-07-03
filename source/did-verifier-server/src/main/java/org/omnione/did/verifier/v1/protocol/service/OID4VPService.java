@@ -135,10 +135,19 @@ public class OID4VPService {
      */
     @Transactional
     public Oid4vpResponseResult receiveResponse(Oid4vpResponseRequest request) {
-        log.debug("=== OID4VP receiveResponse for state: {} ===", request.getState());
+        return processResponse(request.getState(), request.getVpToken(),
+                request.getError(), request.getErrorDescription());
+    }
+
+    /**
+     * VP Token 검증 처리(기존 receiveResponse 본문, 무변경). state로 세션 매핑을 조회해 Transaction/VpSubmit에 매핑한다.
+     * DCQL 쿼리의 credential id를 세션에서 읽어 vpTokenMap 키로 동적 매핑한다.
+     */
+    Oid4vpResponseResult processResponse(String state, String vpTokenJson, String error, String errorDescription) {
+        log.debug("=== OID4VP receiveResponse for state: {} ===", state);
 
         // 1. state로 세션 매핑 조회 (매핑이 없으면 Transaction도 특정할 수 없어 VpSubmit 저장 불가)
-        Oid4vpSessionMapping mapping = sessionMappingRepository.findByState(request.getState())
+        Oid4vpSessionMapping mapping = sessionMappingRepository.findByState(state)
                 .orElseThrow(() -> new OpenDidException(ErrorCode.OID4VP_SESSION_MAPPING_NOT_FOUND));
 
         Transaction transaction = transactionService.findTransactionByTxId(mapping.getTxId());
@@ -148,13 +157,13 @@ public class OID4VPService {
             validateTransaction(transaction);
 
             // 3. oid4vp_session에서 DCQL 쿼리 조회 → credential ID 동적 추출
-            Oid4vpSession oid4vpSession = oid4vpSessionJpaRepository.findByState(request.getState())
+            Oid4vpSession oid4vpSession = oid4vpSessionJpaRepository.findByState(state)
                     .orElseThrow(() -> new OpenDidException(ErrorCode.OID4VP_SESSION_MAPPING_NOT_FOUND));
 
             String dcqlQuery = oid4vpSession.getDcqlQuery();
             // vp_token은 DCQL 응답 형식({credentialId: [VP, ...]})이므로 SDK 파서로 그대로 해석한다.
             // (자체 매핑 시 vp_token 전체를 다시 credentialId 키에 넣어 이중 래핑되는 문제가 있었음)
-            Map<String, List<Object>> vpTokenMap = oid4VPHelperService.parseVPToken(request.getVpToken());
+            Map<String, List<Object>> vpTokenMap = oid4VPHelperService.parseVPToken(vpTokenJson);
             log.debug("vpTokenMap keys: {}", vpTokenMap.keySet());
 
             boolean hasMdoc = containsMdocFormat(dcqlQuery);
@@ -175,22 +184,22 @@ public class OID4VPService {
                         issuerPublicKeys.isEmpty() ? List.of("unresolved-issuer-key") : issuerPublicKeys,
                         holderPublicKeys.isEmpty() ? null : holderPublicKeys,
                         trustedRoots,
-                        request.getState()
+                        state
                 );
             } else {
                 result = authorizationService.receiveResponse(
                         vpTokenMap,
                         issuerPublicKeys.isEmpty() ? List.of("unresolved-issuer-key") : issuerPublicKeys,
                         holderPublicKeys.isEmpty() ? null : holderPublicKeys,
-                        request.getState(),
-                        request.getError(),
-                        request.getErrorDescription(),
+                        state,
+                        error,
+                        errorDescription,
                         "POST"
                 );
             }
 
             if (result.isSuccess()) {
-                vpSubmitAuditService.recordSuccess(transaction.getId(), request.getVpToken(), holderDid, vpFormat);
+                vpSubmitAuditService.recordSuccess(transaction.getId(), vpTokenJson, holderDid, vpFormat);
                 transactionService.updateTransactionStatus(transaction.getId(), TransactionStatus.COMPLETED);
                 log.debug("*** OID4VP response processed. txId={}, status=COMPLETED ***", mapping.getTxId());
 
@@ -200,7 +209,7 @@ public class OID4VPService {
                         .build();
             }
 
-            vpSubmitAuditService.recordFailure(transaction.getId(), request.getVpToken(), holderDid, result.getErrorCode(), vpFormat);
+            vpSubmitAuditService.recordFailure(transaction.getId(), vpTokenJson, holderDid, result.getErrorCode(), vpFormat);
             transactionService.updateTransactionStatus(transaction.getId(), TransactionStatus.FAILED);
             log.error("OID4VP response failed: {} - {}", result.getErrorCode(), result.getErrorDescription());
 
@@ -212,13 +221,13 @@ public class OID4VPService {
                     .build();
 
         } catch (OpenDidException e) {
-            vpSubmitAuditService.recordFailure(transaction.getId(), request.getVpToken(), null, e.getErrorCode().getCode(), null);
+            vpSubmitAuditService.recordFailure(transaction.getId(), vpTokenJson, null, e.getErrorCode().getCode(), null);
             transactionService.updateTransactionStatus(transaction.getId(), TransactionStatus.FAILED);
             throw e;
         } catch (OID4VPException e) {
             // vp_token 파싱 등 SDK 처리 실패: 실패로 기록하고 FAILED 결과 반환(컨트롤러에서 500으로 변환)
             log.error("OID4VP response failed: {} - {}", e.getErrorCode(), e.getErrorMsg(), e);
-            vpSubmitAuditService.recordFailure(transaction.getId(), request.getVpToken(), null, e.getErrorCode(), null);
+            vpSubmitAuditService.recordFailure(transaction.getId(), vpTokenJson, null, e.getErrorCode(), null);
             transactionService.updateTransactionStatus(transaction.getId(), TransactionStatus.FAILED);
             return Oid4vpResponseResult.builder()
                     .sessionId(mapping.getTxId())
