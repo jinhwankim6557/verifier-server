@@ -103,6 +103,10 @@ public class Oid4vpEncKeyManager {
     }
 
     public ECPrivateKey loadPrivateKey(String storedJwk) {
+        if (storedJwk == null || storedJwk.isBlank()) {
+            log.error("Stored enc private key JWK is null or blank");
+            throw new OpenDidException(ErrorCode.OID4VP_ENC_KEY_LOAD_FAILED);
+        }
         try {
             return ECKey.parse(storedJwk).toECPrivateKey();
         } catch (ParseException | JOSEException e) {

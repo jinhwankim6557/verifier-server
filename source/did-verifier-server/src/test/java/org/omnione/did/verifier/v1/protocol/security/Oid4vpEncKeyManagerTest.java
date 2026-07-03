@@ -10,6 +10,7 @@ import com.nimbusds.jose.crypto.ECDHEncrypter;
 import com.nimbusds.jose.jwk.ECKey;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.omnione.did.base.exception.OpenDidException;
 import org.omnione.did.oid4vc.oid4vp.config.OID4VPConfig;
 import org.omnione.did.oid4vc.oid4vp.service.VerifierConfigService;
 import org.omnione.did.oid4vc.oid4vp.util.crypto.JweResponseDecryptor;
@@ -18,6 +19,7 @@ import java.security.interfaces.ECPrivateKey;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -84,5 +86,11 @@ class Oid4vpEncKeyManagerTest {
         jweObject.encrypt(new ECDHEncrypter(key.toPublicJWK()));
 
         assertThat(manager.extractKid(jweObject.serialize())).isEqualTo(key.getKeyID());
+    }
+
+    @Test
+    void loadPrivateKey_nullStoredJwk_throwsOpenDidException() {
+        assertThatThrownBy(() -> manager.loadPrivateKey(null))
+                .isInstanceOf(OpenDidException.class);
     }
 }
