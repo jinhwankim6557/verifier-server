@@ -20,6 +20,7 @@ interface OID4VPConfigData {
   clientMetadata: { vpFormatsSupported: Record<string, object> };
   crypto: { vpTokenEncryptionKey: string | null };
   verification?: { skipX5cChainValidation?: boolean; enforceClaimConstraints?: boolean };
+  encryption?: { alg: string; enc: string };
 }
 
 const DEFAULT_CONFIG: OID4VPConfigData = {
@@ -38,6 +39,7 @@ const DEFAULT_CONFIG: OID4VPConfigData = {
   },
   crypto: { vpTokenEncryptionKey: null },
   verification: { skipX5cChainValidation: false, enforceClaimConstraints: false },
+  encryption: { alg: 'ECDH-ES', enc: 'A256GCM' },
 };
 
 const Oid4vpConfigPage = () => {
@@ -74,6 +76,7 @@ const Oid4vpConfigPage = () => {
           },
           verification: data.verification || { skipX5cChainValidation: false, enforceClaimConstraints: false },
           crypto: data.crypto || { vpTokenEncryptionKey: null },
+          encryption: data.encryption || { alg: 'ECDH-ES', enc: 'A256GCM' },
         };
         setConfig(parsed);
         setOriginalConfig(parsed);
@@ -334,6 +337,28 @@ const Oid4vpConfigPage = () => {
         />
         <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
           VP Token 암호화에 사용되는 대칭키입니다. DB seed 또는 직접 설정으로 관리됩니다.
+        </Typography>
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mt: 1 }}>
+          <TextField
+            fullWidth
+            label="JWE Key Agreement (alg)"
+            value={config.encryption?.alg || 'ECDH-ES'}
+            variant="outlined" size="small"
+            InputProps={{ readOnly: true }}
+            sx={{ bgcolor: '#fafafa' }}
+          />
+          <TextField
+            fullWidth
+            label="JWE Content Encryption (enc)"
+            value={config.encryption?.enc || 'A256GCM'}
+            variant="outlined" size="small"
+            InputProps={{ readOnly: true }}
+            sx={{ bgcolor: '#fafafa' }}
+          />
+        </Box>
+        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+          OID4VP 응답(direct_post.jwt) JWE 암호화 알고리즘입니다. 전체 트랜잭션에 일괄 적용되며(정책별 on/off 없음),
+          현재는 읽기전용입니다 — 값을 바꾸려면 Wallet과 사전 합의가 필요합니다.
         </Typography>
 
         <SectionLabel>Verification (mdoc)</SectionLabel>
