@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!-- OID4VP JWE 응답 암호화: 기존 oid4vp_config seed row에 encryption(alg/enc) 필드 백필.
+         이미 encryption 키가 있는 row(관리자가 이미 편집한 경우 등)는 건드리지 않는다.
+         주의: 이 리터럴은 set.4/protocol-update_oid4vp_config_for_mdoc.xml 적용 이후의 현재 row 값
+         (clientId.scheme=decentralized_identifier, mso_mdoc 포맷, verification 섹션 포함)을 기준으로
+         encryption 필드만 추가한 것이다 — set.3의 구 seed 리터럴을 그대로 재사용하면 mdoc 지원이
+         유실되므로 사용하지 않는다. -->
+    <changeSet id="oid4vp-config-add-encryption" author="unified-verifier">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="1">SELECT COUNT(*) FROM oid4vp_config WHERE type = 'OID4VP' AND config NOT LIKE '%"encryption"%'</sqlCheck>
+        </preConditions>
+        <update tableName="oid4vp_config">
+            <column name="config" value='{"baseUrl":"http://127.0.0.1:8092","clientName":"OpenDID Verifier","invocationScheme":"openid4vp://","clientId":{"scheme":"decentralized_identifier","value":"did:omn:verifier"},"session":{"sessionTtl":300000},"endpoints":{"response":"/oid4vp/response","request":"/oid4vp/request"},"clientMetadata":{"vpFormatsSupported":{"dc+sd-jwt":{},"opendid_vc":{},"mso_mdoc":{"alg_values":["ES256"]}}},"crypto":{"vpTokenEncryptionKey":"PcYKARaqs/LMVoIG3kzTV1BHDDDSJrmNJKn6mOTMhu8="},"encryption":{"alg":"ECDH-ES","enc":"A256GCM"},"verification":{"skipX5cChainValidation":false,"enforceClaimConstraints":false}}' />
+            <where>type = 'OID4VP'</where>
+        </update>
+    </changeSet>
+
+</databaseChangeLog>

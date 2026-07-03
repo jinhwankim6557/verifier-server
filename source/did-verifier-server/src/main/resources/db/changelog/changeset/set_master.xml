@@ -40,5 +40,6 @@
   <include file="set.4/protocol-add_scope_mapping_client_id_scheme.xml" relativeToChangelogFile="true" />
   <include file="set.4/protocol-add_oid4vp_session_enc_key.xml" relativeToChangelogFile="true" />
   <include file="set.4/protocol-add_oid4vp_session_enc_kid_index.xml" relativeToChangelogFile="true" />
+  <include file="set.4/protocol-add_oid4vp_config_encryption.xml" relativeToChangelogFile="true" />
 
 </databaseChangeLog>

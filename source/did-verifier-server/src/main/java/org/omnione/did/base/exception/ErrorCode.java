@@ -149,7 +149,11 @@ public enum ErrorCode {
     OID4VP_INITIATION_FAILED("SSRVVRF01305", "Failed to initiate OID4VP verification.", 500),
     OID4VP_SESSION_MAPPING_NOT_FOUND("SSRVVRF01306", "OID4VP session mapping not found.", 400),
     OID4VP_AUTHORIZATION_REQUEST_FAILED("SSRVVRF01307", "Failed to retrieve OID4VP authorization request.", 500),
-    OID4VP_RESPONSE_PROCESSING_FAILED("SSRVVRF01308", "Failed to process OID4VP response.", 500);
+    OID4VP_RESPONSE_PROCESSING_FAILED("SSRVVRF01308", "Failed to process OID4VP response.", 500),
+    OID4VP_ENC_KEY_GENERATION_FAILED("SSRVVRF01309", "Failed to generate OID4VP encryption key pair.", 500),
+    OID4VP_ENC_KEY_LOAD_FAILED("SSRVVRF01310", "Failed to load OID4VP encryption private key.", 500),
+    OID4VP_JWE_HEADER_PARSE_FAILED("SSRVVRF01311", "Failed to parse JWE header.", 400),
+    OID4VP_RESPONSE_DECRYPTION_FAILED("SSRVVRF01312", "Failed to decrypt OID4VP JWE response.", 400);
 
 
     private final String code;
