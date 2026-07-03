@@ -22,4 +22,7 @@ public class Oid4vpResponseRequest {
 
     @JsonProperty("error_description")
     private String errorDescription;
+
+    /** direct_post.jwt: JWE Compact 문자열. 있으면 평문 필드 대신 이 값을 복호화해서 처리한다. */
+    private String response;
 }
