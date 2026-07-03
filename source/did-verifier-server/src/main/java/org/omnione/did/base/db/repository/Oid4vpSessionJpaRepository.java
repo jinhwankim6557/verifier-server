@@ -9,4 +9,5 @@ public interface Oid4vpSessionJpaRepository extends JpaRepository<Oid4vpSession,
     Optional<Oid4vpSession> findByState(String state);
     Optional<Oid4vpSession> findByRequestId(String requestId);
     Optional<Oid4vpSession> findByTransactionId(String transactionId);
+    Optional<Oid4vpSession> findByEncKid(String encKid);
 }

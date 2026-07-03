@@ -57,4 +57,10 @@ public class Oid4vpSession implements Serializable {
 
     @Column(name = "updated_at")
     private Long updatedAt;
+
+    @Column(name = "enc_kid", length = 100)
+    private String encKid;
+
+    @Column(name = "enc_private_key_jwk", columnDefinition = "text")
+    private String encPrivateKeyJwk;
 }

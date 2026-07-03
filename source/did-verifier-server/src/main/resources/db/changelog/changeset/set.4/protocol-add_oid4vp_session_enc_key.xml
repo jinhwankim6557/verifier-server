@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!-- OID4VP JWE 응답 암호화: 트랜잭션별 임시 enc 키쌍(kid + 개인키 JWK) 저장 컬럼 -->
+    <changeSet id="oid4vp-session-add-enc-key" author="unified-verifier">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="oid4vp_session" columnName="enc_kid"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="oid4vp_session">
+            <column name="enc_kid" type="varchar(100)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="enc_private_key_jwk" type="text">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>
