@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!-- enc_kid 조회(findByEncKid) 성능을 위한 인덱스 추가 -->
+    <changeSet id="oid4vp-session-add-enc-kid-index" author="unified-verifier">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists tableName="oid4vp_session" indexName="idx_oid4vp_session_enc_kid"/>
+            </not>
+        </preConditions>
+        <createIndex tableName="oid4vp_session" indexName="idx_oid4vp_session_enc_kid">
+            <column name="enc_kid"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>
