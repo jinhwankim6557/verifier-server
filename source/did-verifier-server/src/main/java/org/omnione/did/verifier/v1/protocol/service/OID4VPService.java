@@ -1,5 +1,6 @@
 package org.omnione.did.verifier.v1.protocol.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -21,10 +22,12 @@ import org.omnione.did.oid4vc.oid4vp.dto.ServiceResult;
 import org.omnione.did.oid4vc.oid4vp.exception.OID4VPException;
 import org.omnione.did.oid4vc.oid4vp.service.AuthorizationService;
 import org.omnione.did.oid4vc.oid4vp.service.OID4VPHelperService;
+import org.omnione.did.oid4vc.oid4vp.util.crypto.JweResponseDecryptor;
 import org.omnione.did.oid4vc.oid4vp.util.crypto.MultibaseUtils;
 import org.omnione.did.oid4vc.oid4vp.util.jar.jws.CompactSigner;
 
 import java.security.PrivateKey;
+import java.security.interfaces.ECPrivateKey;
 import org.omnione.did.verifier.v1.admin.service.VerifierInfoQueryService;
 import org.omnione.did.verifier.v1.agent.service.DidDocService;
 import org.omnione.did.verifier.v1.agent.service.FileWalletService;
@@ -33,6 +36,7 @@ import org.omnione.did.verifier.v1.common.service.VpSubmitAuditService;
 import org.omnione.did.verifier.v1.protocol.api.dto.Oid4vpResponseRequest;
 import org.omnione.did.verifier.v1.protocol.api.dto.Oid4vpResponseResult;
 import org.omnione.did.verifier.v1.protocol.security.MdocTrustAnchorLoader;
+import org.omnione.did.verifier.v1.protocol.security.Oid4vpEncKeyManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,6 +60,8 @@ public class OID4VPService {
     private final DidDocService didDocService;
     private final ObjectMapper objectMapper;
     private final VpSubmitAuditService vpSubmitAuditService;
+    private final Oid4vpEncKeyManager encKeyManager;
+    private final JweResponseDecryptor jweResponseDecryptor;
 
     /**
      * Authorization Request JWT 조회 (Wallet이 request_uri로 호출)
@@ -135,8 +141,67 @@ public class OID4VPService {
      */
     @Transactional
     public Oid4vpResponseResult receiveResponse(Oid4vpResponseRequest request) {
+        if (isEncrypted(request)) {
+            return receiveEncryptedResponse(request.getResponse());
+        }
         return processResponse(request.getState(), request.getVpToken(),
                 request.getError(), request.getErrorDescription());
+    }
+
+    static boolean isEncrypted(Oid4vpResponseRequest request) {
+        return request.getResponse() != null && !request.getResponse().isBlank();
+    }
+
+    /**
+     * direct_post.jwt(JWE) 응답 처리.
+     * kid로 세션·임시 개인키를 먼저 특정한 뒤 SDK 복호화 유틸에 위임한다(§5.5 ①②는 통합서버, ③④는 SDK).
+     * transaction 확보 전 단계이므로 이 메서드에서 던지는 예외는 processResponse의 catch 블록(transaction 참조)에 들어가지 않는다.
+     */
+    private Oid4vpResponseResult receiveEncryptedResponse(String jweCompact) {
+        String kid = encKeyManager.extractKid(jweCompact);
+        Oid4vpSession session = oid4vpSessionJpaRepository.findByEncKid(kid)
+                .orElseThrow(() -> new OpenDidException(ErrorCode.OID4VP_SESSION_MAPPING_NOT_FOUND));
+
+        JweResponseDecryptor.DecryptedResponse decrypted;
+        try {
+            ECPrivateKey privateKey = encKeyManager.loadPrivateKey(session.getEncPrivateKeyJwk());
+            decrypted = jweResponseDecryptor.decrypt(jweCompact, privateKey);
+        } catch (OID4VPException e) {
+            log.warn("OID4VP response decryption failed for kid={}: {}", kid, e.getErrorMsg());
+            throw new OpenDidException(ErrorCode.OID4VP_RESPONSE_DECRYPTION_FAILED);
+        }
+
+        Map<String, Object> payload;
+        try {
+            payload = objectMapper.readValue(decrypted.getPlaintext(), Map.class);
+        } catch (JsonProcessingException e) {
+            log.warn("Decrypted JWE payload is not valid JSON for kid={}", kid);
+            throw new OpenDidException(ErrorCode.OID4VP_RESPONSE_DECRYPTION_FAILED);
+        }
+
+        Object vpTokenValue = payload.get("vp_token");
+        Object stateValue = payload.get("state");
+        if (vpTokenValue == null || stateValue == null) {
+            log.warn("Decrypted JWE payload missing vp_token/state for kid={}", kid);
+            throw new OpenDidException(ErrorCode.OID4VP_RESPONSE_DECRYPTION_FAILED);
+        }
+
+        // 공개키는 client_metadata로 노출되므로 누구나 세션 A의 키로 암호화하면서 페이로드에 다른 세션의
+        // state를 넣을 수 있다. kid로 찾은 세션과 복호화된 state가 다른 세션을 가리키면 거부해 매핑 오염을 막는다.
+        if (!session.getState().equals(stateValue.toString())) {
+            log.warn("Decrypted JWE state does not match session bound to kid={}: sessionState={}, payloadState={}",
+                    kid, session.getState(), stateValue);
+            throw new OpenDidException(ErrorCode.OID4VP_RESPONSE_DECRYPTION_FAILED);
+        }
+
+        try {
+            String vpTokenJson = vpTokenValue instanceof String
+                    ? (String) vpTokenValue
+                    : objectMapper.writeValueAsString(vpTokenValue);
+            return processResponse(stateValue.toString(), vpTokenJson, null, null);
+        } catch (JsonProcessingException e) {
+            throw new OpenDidException(ErrorCode.OID4VP_RESPONSE_DECRYPTION_FAILED);
+        }
     }
 
     /**
