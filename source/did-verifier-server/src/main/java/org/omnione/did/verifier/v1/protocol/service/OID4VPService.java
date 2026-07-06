@@ -179,6 +179,21 @@ public class OID4VPService {
             throw new OpenDidException(ErrorCode.OID4VP_RESPONSE_DECRYPTION_FAILED);
         }
 
+        // 의도적 범위 제외(최종 리뷰 결론, 오버사이트 아님): 이 메서드는 암호화된 error-only 응답
+        // (vp_token 없이 {error, error_description, state}만 담은 페이로드)을 아직 지원하지 않는다.
+        // 그런 페이로드는 정상 OAuth 에러로 처리되지 못하고 OID4VP_RESPONSE_DECRYPTION_FAILED로 거부된다.
+        // 원 설계의 페이로드 계약은 성공 형태(vp_token/presentation_submission/state)만 정의했고,
+        // 암호화된 error 응답 형태는 애초에 명세된 적이 없다.
+        // 참고로 평문 경로(processResponse, Task 9에서 무변경 추출·승인됨)도 동일한 근본 한계를 이미 갖고 있다:
+        // processResponse는 error/errorDescription을 authorizationService.receiveResponse(...)로 전달하지만,
+        // 그보다 먼저 oid4VPHelperService.parseVPToken(vpTokenJson)을 무조건 호출하며, SDK의
+        // OID4VPHelperService.parseVPToken(null)은 error 처리 기회를 주기 전에
+        // OID4VPException(ERR_CODE_VP_TOKEN_NULL)을 즉시 던진다(SDK 소스 확인 완료, 2026-07-06).
+        // 즉 error-only 응답을 우아하게 처리하지 못하는 것은 JWE 작업이 도입한 회귀가 아니라
+        // 평문 경로에도 이미 존재하던 특성이며, 암호화 경로는 (더 이른 시점에) 다른 에러 코드로
+        // 실패할 뿐이다. vp_token/error 모두 지원하려면 (a) processResponse의 error 우선 분기 추가와
+        // (b) 이 메서드에서 error/error_description 추출·전달이 필요하며, 이는 Task 9의 승인된 로직을
+        // 변경하는 별도 태스크/리뷰 대상이다.
         Object vpTokenValue = payload.get("vp_token");
         Object stateValue = payload.get("state");
         if (vpTokenValue == null || stateValue == null) {
