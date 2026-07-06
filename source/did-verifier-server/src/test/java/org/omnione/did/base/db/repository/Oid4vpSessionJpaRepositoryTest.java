@@ -3,46 +3,44 @@ package org.omnione.did.base.db.repository;
 import org.junit.jupiter.api.Test;
 import org.omnione.did.base.db.domain.Oid4vpSession;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.domain.EntityScan;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.annotation.FilterType;
-import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
-import org.springframework.test.context.ContextConfiguration;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * NOTE: {@code @DataJpaTest} auto-detects the nearest {@code @SpringBootConfiguration}
- * (here, {@code VerifierApplication}) and component-scans its entire base package
- * (org.omnione.did). That base package contains several app-wide {@code @Configuration}
- * classes (e.g. OpenApiConfig, SecurityConfig, OpenFeignConfig) with hard dependencies
- * (BuildProperties, a custom ObjectMapper bean, etc.) that the restricted JPA test slice
- * does not provide, so the context fails to load. A minimal nested
- * {@code @SpringBootApplication} scoped only to the oid4vp_session entity/repository
- * (using an include filter, since the repository package also holds several QueryDSL
- * custom-repository impls requiring a JPAQueryFactory bean) avoids pulling in that
- * unrelated configuration, without modifying any production code.
+ * NOTE: this test previously used {@code @DataJpaTest} with a nested, hand-scoped
+ * {@code @SpringBootApplication}/{@code @EnableJpaRepositories(basePackageClasses = ...)}
+ * class to avoid pulling in the full {@code VerifierApplication} context (which has
+ * app-wide {@code @Configuration} classes with hard dependencies the restricted JPA
+ * slice didn't provide). That nested "second root configuration" class was found
+ * (during Task 12's investigation) to corrupt Spring Data JPA repository scanning for
+ * OTHER unrelated {@code @SpringBootTest}s in this module that don't specify an explicit
+ * {@code classes=} (their repository scan silently collapsed down to just
+ * {@code Oid4vpSessionJpaRepository}, dropping every other repository bean with
+ * {@code NoSuchBeanDefinitionException}) — the exact mechanism wasn't fully pinned down,
+ * but removing the nested class from the classpath reliably fixed it every time it was
+ * tried, regardless of tweaking the nested class's annotations.
+ *
+ * Switched to the same {@code @SpringBootTest + @ActiveProfiles("test")} full-context
+ * pattern used by the other integration tests in this module (this is now safe because
+ * Task 12 also added {@code src/test/resources/import.sql}, which seeds the
+ * {@code oid4vp_config} row that {@code VerifierConfigService} needs at
+ * {@code @PostConstruct} — previously the reason a full-context boot under the "test"
+ * profile could fail on its own, unrelated to OpenApiConfig/SecurityConfig/OpenFeignConfig).
  */
-@DataJpaTest
-@ContextConfiguration(classes = Oid4vpSessionJpaRepositoryTest.TestApplication.class)
+@SpringBootTest
+@ActiveProfiles("test")
 class Oid4vpSessionJpaRepositoryTest {
-
-    @SpringBootApplication
-    @EntityScan(basePackageClasses = Oid4vpSession.class)
-    @EnableJpaRepositories(
-            basePackageClasses = Oid4vpSessionJpaRepository.class,
-            includeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = Oid4vpSessionJpaRepository.class))
-    static class TestApplication {
-    }
 
     @Autowired
     private Oid4vpSessionJpaRepository repository;
 
     @Test
+    @Transactional
     void findByEncKid_returnsSessionWithMatchingEncKid() {
         Oid4vpSession session = Oid4vpSession.builder()
                 .transactionId("tx-1")
@@ -62,6 +60,7 @@ class Oid4vpSessionJpaRepositoryTest {
     }
 
     @Test
+    @Transactional
     void findByEncKid_unknownKid_returnsEmpty() {
         assertThat(repository.findByEncKid("no-such-kid")).isEmpty();
     }
