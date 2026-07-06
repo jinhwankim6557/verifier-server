@@ -923,6 +923,75 @@ function b64urlBytes(bytes) {
   return btoa(bin).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 }
 
+// ECDH-ES + A256GCM JWE 암호화 (RFC 7516 §5.1, RFC 7518 §4.6). direct_post.jwt 응답 제출용.
+function concatBytes(arrays) {
+  const total = arrays.reduce((sum, a) => sum + a.length, 0);
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const a of arrays) { result.set(a, offset); offset += a.length; }
+  return result;
+}
+
+function uint32be(n) {
+  const b = new Uint8Array(4);
+  new DataView(b.buffer).setUint32(0, n);
+  return b;
+}
+
+// NIST SP 800-56A Concat KDF. A256GCM(256bit CEK)은 SHA-256 한 번으로 정확히 32바이트가 나와 라운드 불필요.
+async function concatKdf(z, encAlgName, keyDataLenBits) {
+  const algIdBytes = new TextEncoder().encode(encAlgName);
+  const otherInfo = concatBytes([
+    uint32be(algIdBytes.length), algIdBytes,   // AlgorithmID = enc 값(direct agreement 모드, RFC7518 §4.6.2)
+    uint32be(0),                               // PartyUInfo(apu) 없음
+    uint32be(0),                               // PartyVInfo(apv) 없음
+    uint32be(keyDataLenBits),                  // SuppPubInfo = keydatalen(bits)
+  ]);
+  const input = concatBytes([uint32be(1), z, otherInfo]); // counter=1 (reps=1)
+  const hash = await crypto.subtle.digest('SHA-256', input);
+  return new Uint8Array(hash).slice(0, keyDataLenBits / 8);
+}
+
+async function importEcdhPublicJwk(jwk) {
+  return crypto.subtle.importKey('jwk',
+    { kty: 'EC', crv: 'P-256', x: jwk.x, y: jwk.y },
+    { name: 'ECDH', namedCurve: 'P-256' }, true, []);
+}
+
+/** plaintextJson({vp_token, presentation_submission, state})을 recipientJwk(Verifier enc 공개키)로 JWE Compact 암호화한다. */
+async function encryptJwe(plaintextJson, recipientJwk) {
+  const ephemeralKeyPair = await crypto.subtle.generateKey(
+    { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const epkPublicJwk = await crypto.subtle.exportKey('jwk', ephemeralKeyPair.publicKey);
+
+  const recipientPublicKey = await importEcdhPublicJwk(recipientJwk);
+  const zBits = await crypto.subtle.deriveBits(
+    { name: 'ECDH', public: recipientPublicKey }, ephemeralKeyPair.privateKey, 256);
+  const z = new Uint8Array(zBits);
+
+  const cekBytes = await concatKdf(z, 'A256GCM', 256);
+  const cek = await crypto.subtle.importKey('raw', cekBytes, { name: 'AES-GCM' }, false, ['encrypt']);
+
+  const header = {
+    alg: 'ECDH-ES', enc: 'A256GCM',
+    kid: recipientJwk.kid,
+    epk: { kty: 'EC', crv: 'P-256', x: epkPublicJwk.x, y: epkPublicJwk.y },
+  };
+  const headerB64 = b64url(header);
+  const aad = new TextEncoder().encode(headerB64);
+
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const plaintextBytes = new TextEncoder().encode(plaintextJson);
+  // WebCrypto AES-GCM은 ciphertext+tag(16B)를 이어붙여 반환 — JWE Compact는 둘을 분리해서 각각 인코딩해야 한다.
+  const encrypted = new Uint8Array(await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv, additionalData: aad, tagLength: 128 }, cek, plaintextBytes));
+  const ciphertext = encrypted.slice(0, encrypted.length - 16);
+  const tag = encrypted.slice(encrypted.length - 16);
+
+  // ECDH-ES(direct agreement)는 CEK를 키합의로 직접 유도하므로 encrypted_key 파트는 빈 값(RFC7518 §4.6).
+  return [headerB64, '', b64urlBytes(iv), b64urlBytes(ciphertext), b64urlBytes(tag)].join('.');
+}
+
 // ES256 JWS 서명 (raw r||s 64bytes, base64url 인코딩).
 // WebCrypto ECDSA는 P-1363 raw 포맷을 반환 → JOSE/SD-JWT 규격 그대로 사용 가능.
 async function signJwsEs256(headerB64, payloadB64) {
@@ -1455,18 +1524,31 @@ async function oid4vpSubmit() {
   document.getElementById('sendingText').textContent = 'Submitting VP Token...';
   document.getElementById('sendingApi').textContent = 'POST ' + responseUri;
 
-  addLog('POST', responseUri, '→', { format: vc.format, vcId, state });
+  const isEncrypted = ar.response_mode === 'direct_post.jwt';
+  addLog('POST', responseUri, '→', { format: vc.format, vcId, state, response_mode: ar.response_mode || 'direct_post' });
 
   try {
-    // Spring form binding: use Java field names
-    const formData = new URLSearchParams();
-    formData.append('vpToken', vpToken);
-    formData.append('state', state);
+    let body;
+    if (isEncrypted) {
+      const jwk = ar.client_metadata && ar.client_metadata.jwks && ar.client_metadata.jwks.keys && ar.client_metadata.jwks.keys[0];
+      if (!jwk) { throw new Error('response_mode=direct_post.jwt but client_metadata.jwks has no key'); }
+      const payloadJson = JSON.stringify({ vp_token: vpToken, presentation_submission: {}, state });
+      const jwe = await encryptJwe(payloadJson, jwk);
+      const formData = new URLSearchParams();
+      formData.append('response', jwe);
+      body = formData.toString();
+    } else {
+      // Spring form binding: use Java field names
+      const formData = new URLSearchParams();
+      formData.append('vpToken', vpToken);
+      formData.append('state', state);
+      body = formData.toString();
+    }
 
     const res = await fetch(responseUri, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: formData.toString()
+      body
     });
 
     let result;
