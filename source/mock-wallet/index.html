@@ -301,11 +301,16 @@
       <input id="cfgVerifierUrl" type="text" value="http://localhost:8092" />
       <label>Demo Server Base URL</label>
       <input id="cfgDemoUrl" type="text" value="http://localhost:8080" />
-      <label style="margin-top:12px;">Holder Private Key (OpenDID wallet 형식: z... 또는 Base64 PKCS#8)</label>
-      <textarea id="cfgHolderPrivKey" rows="4" style="font-size:11px;font-family:monospace;word-break:break-all;width:100%;padding:6px;border:1px solid #ccc;border-radius:4px;" placeholder="z3QtUYcv... 또는 MIGTAgEA..."></textarea>
+      <label style="margin-top:12px;">LSS URL (DID Document 조회용)</label>
+      <input id="cfgLssUrl" type="text" value="http://127.0.0.1:8098" />
+      <label style="margin-top:12px;">Wallet Signing Key (Issuer + Holder 공용, JWK JSON 또는 Base64 PKCS#8)</label>
+      <textarea id="cfgHolderPrivKey" rows="4" style="font-size:11px;font-family:monospace;word-break:break-all;width:100%;padding:6px;border:1px solid #ccc;border-radius:4px;" placeholder='{"kty":"EC","crv":"P-256","x":"...","y":"...","d":"..."} 또는 MIGTAgEA...'></textarea>
+      <div id="keyParseStatus" style="font-size:11px;margin-top:4px;"></div>
       <div style="margin-top:12px;">
         <button class="btn btn-filled btn-sm" onclick="saveConfig()">Save</button>
+        <button class="btn btn-outline btn-sm" onclick="checkDidRegistration()">Check DID Registration</button>
       </div>
+      <div id="didCheckResult" style="margin-top:12px;font-size:12px;"></div>
     </div>
   </div>
 
@@ -533,10 +538,20 @@ const VC_DEFAULTS = {
    State
 ════════════════════════════════════════ */
 let scenario = 'oid4vp';
+// mock-wallet 전용 테스트 키의 기본값(JWK). 실제 앱에서는 사용하지 마세요.
+const DEFAULT_SIGNING_KEY_JWK = {
+  kty: 'EC', crv: 'P-256',
+  x: 'Dgk_F-d8Lj2WXEW5VCwvGvDvQ_dfv3LBHaaM97EJEmA',
+  y: 'ToFoxmPbxHHynr4nCIk5TQsYFNobOA7edU2k9y4pMVQ',
+  d: 'YbBU7wv1L9mmh-ROU5lrP0mzKYwr0ZMs8NcoJV2SRzQ',
+  ext: true
+};
+
 let config = {
   verifierUrl: localStorage.getItem('mw_verifierUrl') || 'http://localhost:8092',
   demoUrl: localStorage.getItem('mw_demoUrl') || 'http://localhost:8080',
-  holderPrivateKey: localStorage.getItem('mw_holderPrivKey') || 'z3QtUYcvXwoGnBByPL9e8H1xa9x8EmRRkm9YaGgHNt2RYYJYb4nXNuaAxmM5mcmbCFZPwY7N6kDuFEsWvg6hkAKtzgBMvWYfET2r21hZerewocjUJNdeBfAsPWyHG4PpFvkJJE4Bc8YNbz4r8jj4L4XFSshrBRUsHuLztwNHdFqXBcDjQoEBV6nLq4zoUooNmibPwwXKh7uKfpV4Ckwe23hfNHmq',
+  lssUrl: localStorage.getItem('mw_lssUrl') || 'http://127.0.0.1:8098',
+  holderPrivateKey: localStorage.getItem('mw_walletSigningKey') || JSON.stringify(DEFAULT_SIGNING_KEY_JWK),
 };
 let oid4vpState = {};
 let didvpState = {};    // { offer, txId, offerId, profile, reqE2e, verifierNonce, selectedVcId }
@@ -611,17 +626,95 @@ updateClock(); setInterval(updateClock, 30000);
 /* ── Config ── */
 document.getElementById('cfgVerifierUrl').value = config.verifierUrl;
 document.getElementById('cfgDemoUrl').value = config.demoUrl;
+document.getElementById('cfgLssUrl').value = config.lssUrl;
 document.getElementById('cfgHolderPrivKey').value = config.holderPrivateKey;
-function saveConfig() {
+async function saveConfig() {
+  const prevKeyRaw = config.holderPrivateKey;
   config.verifierUrl = document.getElementById('cfgVerifierUrl').value.replace(/\/$/, '');
   config.demoUrl = document.getElementById('cfgDemoUrl').value.replace(/\/$/, '');
+  config.lssUrl = document.getElementById('cfgLssUrl').value.replace(/\/$/, '');
   config.holderPrivateKey = document.getElementById('cfgHolderPrivKey').value.trim();
   localStorage.setItem('mw_verifierUrl', config.verifierUrl);
   localStorage.setItem('mw_demoUrl', config.demoUrl);
-  localStorage.setItem('mw_holderPrivKey', config.holderPrivateKey);
+  localStorage.setItem('mw_lssUrl', config.lssUrl);
+
+  const statusEl = document.getElementById('keyParseStatus');
   mockPrivateKey = null; // 키 변경 시 재초기화
-  alert('Config saved!');
-  show('s-vclist');
+  try {
+    await initMockCryptoKey();
+    localStorage.setItem('mw_walletSigningKey', config.holderPrivateKey);
+    statusEl.style.color = '#2e7d32';
+    statusEl.textContent = '✓ 서명 키 파싱 성공 (' + keySourceLabel + ')';
+    alert('Config saved!');
+    show('s-vclist');
+  } catch (e) {
+    // 새 키 파싱 실패 → 이전 키로 되돌림 (서명 기능이 깨지지 않도록)
+    config.holderPrivateKey = prevKeyRaw;
+    document.getElementById('cfgHolderPrivKey').value = prevKeyRaw;
+    mockPrivateKey = null;
+    await initMockCryptoKey().catch(() => {});
+    statusEl.style.color = '#c62828';
+    statusEl.textContent = '✗ 서명 키 파싱 실패: ' + e.message + ' — 이전 키를 계속 사용합니다.';
+    alert('Signing key could not be parsed: ' + e.message + '\nPrevious key kept.');
+  }
+}
+
+/* ── DID Registration Check ── */
+async function fetchDidDoc(lssUrl, did, timeoutMs = 3000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const url = lssUrl.replace(/\/$/, '') + '/lss/api/v1/did-doc?did=' + encodeURIComponent(did);
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function findVerificationMethodMultibase(didDoc, keyFragment) {
+  const vm = (didDoc.verificationMethod || []).find(v => v.id === keyFragment || v.id === '#' + keyFragment);
+  return vm ? vm.publicKeyMultibase : null;
+}
+
+// LSS에서 DID Document를 직접 조회해 현재 서명 키와 비교한다.
+// mock-wallet은 file:// 정적 페이지라 CORS로 막힐 수 있음 — 그 경우 참고용 값만 보여주는 것으로 폴백.
+async function checkDidRegistration() {
+  const resultEl = document.getElementById('didCheckResult');
+  resultEl.innerHTML = '확인 중...';
+
+  try {
+    await initMockCryptoKey();
+  } catch (e) {
+    resultEl.innerHTML = '<span style="color:#c62828;">서명 키가 유효하지 않아 확인할 수 없습니다: ' + esc(e.message) + '</span>';
+    return;
+  }
+
+  const targets = [
+    { did: 'did:omn:issuer', keyId: 'assert', label: 'Issuer (#assert)' },
+    { did: 'did:omn:KJbu1ZiLngnDQwZ7oMHsCGzL2tD', keyId: 'auth', label: 'Holder (#auth)' },
+  ];
+
+  let html = '<div style="margin-bottom:8px;"><strong>현재 서명 키 (' + esc(keySourceLabel) + ')</strong><br/>' +
+    '<span style="font-family:monospace;font-size:11px;word-break:break-all;">' + esc(mockPublicKeyMultibase) + '</span></div>';
+
+  for (const t of targets) {
+    try {
+      const didDoc = await fetchDidDoc(config.lssUrl, t.did);
+      const registered = findVerificationMethodMultibase(didDoc, t.keyId);
+      if (registered === mockPublicKeyMultibase) {
+        html += '<div style="color:#2e7d32;margin-bottom:6px;">&#x2713; ' + esc(t.label) + ' (' + esc(t.did) + ') 일치</div>';
+      } else {
+        html += '<div style="color:#c62828;margin-bottom:6px;">&#x2717; ' + esc(t.label) + ' (' + esc(t.did) + ') 불일치<br/>' +
+          '&nbsp;&nbsp;등록된 값: <span style="font-family:monospace;font-size:11px;word-break:break-all;">' + esc(registered || '(없음)') + '</span></div>';
+      }
+    } catch (e) {
+      html += '<div style="color:#888;margin-bottom:6px;">? ' + esc(t.label) + ' (' + esc(t.did) + ') — LSS 직접 조회 불가 (' + esc(e.message) + ').<br/>' +
+        '&nbsp;&nbsp;위 서명 키 값을 DID Document의 publicKeyMultibase와 직접 비교하세요.</div>';
+    }
+  }
+  resultEl.innerHTML = html;
 }
 
 /* ── Screen Navigation ── */
@@ -735,13 +828,31 @@ function goQrInput() {
   document.getElementById('qrRawData').value = '';
   if (scenario === 'didvp') {
     document.getElementById('qrInputTitle').textContent = 'Paste QR Data (DID VP)';
-    document.getElementById('qrInputHint').innerHTML = 'Paste the VpOfferPayload JSON from Verifier QR.<br/>e.g. {"offerId":"...","type":"VerifyOffer",...}';
+    document.getElementById('qrInputHint').innerHTML =
+      'Verifier QR에서 나온 VpOfferPayload JSON을 붙여넣으세요 (offerId/txId가 최상위 필드로 있어야 합니다).' +
+      '<div class="data-panel" style="margin:8px 0 0;font-size:10px;">' + esc(
+`{
+  "offerId": "d3887ae7-8591-4df3-a8f4-8ccf5e559bdd",
+  "txId": "5f1e2a3b-7c9d-4e21-9f3a-1b2c3d4e5f60",
+  "type": "VerifyOffer",
+  "mode": "Direct",
+  "device": "PC",
+  "service": "Verifier",
+  "endpoints": ["http://localhost:8092/verifier/api/v1/request-profile"],
+  "validUntil": "2026-07-08T00:00:00Z"
+}`) + '</div>';
   } else if (scenario === 'initiate') {
     document.getElementById('qrInputTitle').textContent = 'Unified Initiate (v2)';
-    document.getElementById('qrInputHint').innerHTML = 'Enter Policy ID to call POST /v2/initiate.<br/>Server will auto-route to DID VP or OID4VP.';
+    document.getElementById('qrInputHint').innerHTML =
+      'QR이 아니라 Policy ID(UUID)를 그대로 입력하세요. POST /verifier/api/v2/initiate를 호출하고, 서버가 protocol 값을 보고 OID4VP/DID_VP 중 알아서 라우팅합니다.' +
+      '<div class="data-panel" style="margin:8px 0 0;font-size:10px;">' + esc('0a05e72f-23d9-4945-acce-6ba9d3655fb9') + '</div>';
   } else {
     document.getElementById('qrInputTitle').textContent = 'Paste QR Data (OID4VP)';
-    document.getElementById('qrInputHint').innerHTML = 'Paste the openid4vp:// URI from QR code.<br/>e.g. openid4vp://?request_uri=...&client_id=...';
+    document.getElementById('qrInputHint').innerHTML =
+      'QR코드가 담고 있는 openid4vp:// URI를 붙여넣으세요 (request_uri 파라미터로 실제 Authorization Request를 가져옵니다).' +
+      '<div class="data-panel" style="margin:8px 0 0;font-size:10px;">' + esc(
+        'openid4vp://?request_uri=http%3A%2F%2F127.0.0.1%3A8092%2Foid4vp%2Frequest%2F3ce59476-df0d-46c0-99f4-c7518f714679&client_id=decentralized_identifier%3Adid%3Aomn%3Averifier'
+      ) + '</div>';
   }
   show('s-qrinput');
 }
@@ -834,6 +945,34 @@ async function processOid4vpUri(raw) {
   }
 }
 
+// DCQL credential query의 meta/claims 조건을 선택된 VC와 대조해 제출 전에 로컬에서 미리 걸러낸다.
+// 서버까지 왕복하지 않고도 vct/claim 불일치를 바로 알 수 있게 하는 것이 목적 (제출 자체를 막지는 않음).
+function checkDcqlCompliance(cred, vc) {
+  const warnings = [];
+  if (!cred || !vc || cred.format === 'mso_mdoc') return warnings; // mdoc은 mock-wallet 미지원 (format 경고로 이미 커버됨)
+
+  if (cred.meta && Array.isArray(cred.meta.vct_values) && cred.meta.vct_values.length > 0) {
+    const actualVct = vc.claims && vc.claims.vct;
+    if (!actualVct || !cred.meta.vct_values.includes(actualVct)) {
+      warnings.push('vct 불일치 — 요구: [' + cred.meta.vct_values.join(', ') + '], VC: ' + (actualVct || '(없음)'));
+    }
+  }
+
+  if (Array.isArray(cred.claims) && cred.claims.length > 0) {
+    const flatKeys = new Set(getFlatClaims(vc).map(([k]) => k.split('.').pop()));
+    for (const cq of cred.claims) {
+      if (Array.isArray(cq.path) && cq.path.length > 0) {
+        const key = String(cq.path[cq.path.length - 1]);
+        if (!flatKeys.has(key)) {
+          warnings.push('필수 claim "' + key + '" 이 VC에 없음');
+        }
+      }
+    }
+  }
+
+  return warnings;
+}
+
 function goOid4vpConsent() {
   const ar = oid4vpState.authRequest || {};
   const dcql = oid4vpState.dcqlQuery || {};
@@ -872,6 +1011,10 @@ function goOid4vpConsent() {
     </div>`;
     if (requiredFormat && selectedVc.format !== requiredFormat) {
       vcHtml += `<div style="font-size:12px;color:#e65100;padding:4px 0;">⚠ Required format: ${esc(requiredFormat)}, but VC format is ${esc(selectedVc.format)}. 포맷이 맞지 않을 수 있습니다.</div>`;
+    } else {
+      checkDcqlCompliance(creds[0], selectedVc).forEach(w => {
+        vcHtml += `<div style="font-size:12px;color:#e65100;padding:4px 0;">⚠ ${esc(w)}</div>`;
+      });
     }
   } else {
     vcHtml = '<div style="color:#999;font-size:13px;">No VC available. Please add a VC first.</div>';
@@ -1006,6 +1149,8 @@ async function signJwsEs256(headerB64, payloadB64) {
 // 이 키는 mock-wallet 전용 테스트 키입니다. 실제 앱에서는 사용하지 마세요.
 let mockPrivateKey = null;
 let mockPublicKeyBase64 = null;
+let mockPublicKeyMultibase = null;
+let keySourceLabel = null;
 
 function base58Decode(str) {
   const ALPHA = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -1063,7 +1208,7 @@ function wrapRawKeyAsPkcs8(d32) {
 }
 
 // [1회성 유틸] 브라우저 콘솔에서 `await generateNewMockKey()` 호출.
-// 출력된 JWK는 initMockCryptoKey()의 하드코딩 jwk에,
+// 출력된 JWK는 Config 화면의 "Wallet Signing Key" 필드에,
 // publicKeyMultibase(z...)는 블록체인 DID Document의 #auth/#assert publicKeyMultibase에 붙여넣는다.
 async function generateNewMockKey() {
   const kp = await crypto.subtle.generateKey(
@@ -1095,7 +1240,7 @@ async function generateNewMockKey() {
     publicKeyMultibase_m: multibaseM
   };
   console.log('=== [MockWallet] 새 키 생성 완료 ===');
-  console.log('1) 아래 JWK를 initMockCryptoKey()의 jwk 상수에 붙여넣기:');
+  console.log('1) 아래 JWK를 Config 화면의 "Wallet Signing Key" 필드에 붙여넣기:');
   console.log(JSON.stringify(out.jwk, null, 2));
   console.log('2) 아래 publicKeyMultibase_z 값을 블록체인 DID Document의 #auth / #assert publicKeyMultibase에 등록:');
   console.log(out.publicKeyMultibase_z);
@@ -1104,33 +1249,52 @@ async function generateNewMockKey() {
 }
 window.generateNewMockKey = generateNewMockKey;
 
+// Config의 Wallet Signing Key(JWK JSON 또는 Base64 PKCS#8)를 파싱해 서명 가능한 CryptoKey를 반환.
+// 파싱 실패 시 예외를 던진다 — 호출자(saveConfig)가 이전 키 유지 여부를 결정.
+async function parseSigningKey(raw) {
+  if (!raw) {
+    const key = await crypto.subtle.importKey(
+      'jwk', DEFAULT_SIGNING_KEY_JWK, { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign']
+    );
+    return { privateKey: key, source: 'default' };
+  }
+  // 1) JWK JSON
+  try {
+    const jwk = JSON.parse(raw);
+    if (jwk && jwk.kty === 'EC' && jwk.d) {
+      const key = await crypto.subtle.importKey(
+        'jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign']
+      );
+      return { privateKey: key, source: 'JWK' };
+    }
+  } catch {}
+  // 2) Base64 PKCS#8
+  try {
+    const der = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
+    const key = await crypto.subtle.importKey(
+      'pkcs8', der, { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign']
+    );
+    return { privateKey: key, source: 'PKCS#8' };
+  } catch {}
+  throw new Error('JWK JSON 또는 Base64 PKCS#8 형식이 아닙니다.');
+}
+
 async function initMockCryptoKey() {
   if (mockPrivateKey) return;
-  // generateNewMockKey()로 생성한 키.
-  // publicKeyMultibase(z): zcQRdM1SE8MJBg7wet4RrghajYxpmvFEWWpz9GgmJjvCF
-  // 블록체인 DID Document 등록 대상:
-  //   - did:omn:KJbu1ZiLngnDQwZ7oMHsCGzL2tD 의 #auth
-  //   - did:omn:issuer 의 #assert
-  const jwk = {
-    kty: 'EC',
-    crv: 'P-256',
-    x: 'Dgk_F-d8Lj2WXEW5VCwvGvDvQ_dfv3LBHaaM97EJEmA',
-    y: 'ToFoxmPbxHHynr4nCIk5TQsYFNobOA7edU2k9y4pMVQ',
-    d: 'YbBU7wv1L9mmh-ROU5lrP0mzKYwr0ZMs8NcoJV2SRzQ',
-    ext: true
-  };
-  mockPrivateKey = await crypto.subtle.importKey(
-    'jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign']
-  );
-  
-  // 압축 공개키 유도 (디버깅 용도)
+  const { privateKey, source } = await parseSigningKey((config.holderPrivateKey || '').trim());
+  mockPrivateKey = privateKey;
+  keySourceLabel = source;
+
+  // 압축 공개키 / 멀티베이스 유도 (파싱 경로와 무관하게 JWK export로 통일)
+  const jwk = await crypto.subtle.exportKey('jwk', mockPrivateKey);
   const xB = Uint8Array.from(atob(jwk.x.replace(/-/g,'+').replace(/_/g,'/')), c => c.charCodeAt(0));
   const yB = Uint8Array.from(atob(jwk.y.replace(/-/g,'+').replace(/_/g,'/')), c => c.charCodeAt(0));
   const compressed = new Uint8Array(33);
   compressed[0] = (yB[yB.length-1] & 1) === 0 ? 0x02 : 0x03;
   compressed.set(xB, 1);
   mockPublicKeyBase64 = btoa(String.fromCharCode(...compressed));
-  console.log('[MockWallet] 개인키 로드 완료. 하드코딩된 정확한 키를 사용합니다. 압축 공개키(Base64):', mockPublicKeyBase64);
+  mockPublicKeyMultibase = 'z' + base58Encode(compressed);
+  console.log('[MockWallet] 서명 키 로드 완료 (' + source + '). 압축 공개키(Base64):', mockPublicKeyBase64, '/ multibase:', mockPublicKeyMultibase);
 }
 
 // 비동기 모듈 로딩을 이용해 noble-curves 가져오기
@@ -1520,6 +1684,11 @@ async function oid4vpSubmit() {
   const vc = vcStore[vcId];
   const vpToken = await buildVpToken(vc, ar);
 
+  // DCQL 응답의 vp_token은 "credential id -> [presentation]" 맵 형태여야 함 (parseVPToken이 Map<String,List<Object>>로 파싱)
+  const dcqlCreds = (oid4vpState.dcqlQuery && oid4vpState.dcqlQuery.credentials) || [];
+  const credId = (dcqlCreds[0] && dcqlCreds[0].id) || 'credential';
+  const vpTokenMap = { [credId]: [vpToken] };
+
   show('s-sending');
   document.getElementById('sendingText').textContent = 'Submitting VP Token...';
   document.getElementById('sendingApi').textContent = 'POST ' + responseUri;
@@ -1532,15 +1701,15 @@ async function oid4vpSubmit() {
     if (isEncrypted) {
       const jwk = ar.client_metadata && ar.client_metadata.jwks && ar.client_metadata.jwks.keys && ar.client_metadata.jwks.keys[0];
       if (!jwk) { throw new Error('response_mode=direct_post.jwt but client_metadata.jwks has no key'); }
-      const payloadJson = JSON.stringify({ vp_token: vpToken, presentation_submission: {}, state });
+      const payloadJson = JSON.stringify({ vp_token: vpTokenMap, presentation_submission: {}, state });
       const jwe = await encryptJwe(payloadJson, jwk);
       const formData = new URLSearchParams();
       formData.append('response', jwe);
       body = formData.toString();
     } else {
-      // Spring form binding: use Java field names
+      // OID4VPController.receiveResponse는 @RequestParam(value="vp_token")로 바인딩한다 (snake_case).
       const formData = new URLSearchParams();
-      formData.append('vpToken', vpToken);
+      formData.append('vp_token', JSON.stringify(vpTokenMap));
       formData.append('state', state);
       body = formData.toString();
     }
@@ -1960,9 +2129,11 @@ function applyState(state) {
     config = { ...config, ...state.config };
     localStorage.setItem('mw_verifierUrl', config.verifierUrl);
     localStorage.setItem('mw_demoUrl', config.demoUrl);
-    localStorage.setItem('mw_holderPrivKey', config.holderPrivateKey || '');
+    localStorage.setItem('mw_lssUrl', config.lssUrl || 'http://127.0.0.1:8098');
+    localStorage.setItem('mw_walletSigningKey', config.holderPrivateKey || '');
     document.getElementById('cfgVerifierUrl').value = config.verifierUrl;
     document.getElementById('cfgDemoUrl').value = config.demoUrl;
+    document.getElementById('cfgLssUrl').value = config.lssUrl || 'http://127.0.0.1:8098';
     document.getElementById('cfgHolderPrivKey').value = config.holderPrivateKey || '';
     mockPrivateKey = null;
   }
