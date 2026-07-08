@@ -13,6 +13,7 @@ import org.omnione.did.base.db.repository.DcqlScopeMappingRepository;
 import org.omnione.did.base.db.repository.Oid4vpSessionJpaRepository;
 import org.omnione.did.base.db.repository.PolicyRepository;
 import org.omnione.did.oid4vc.oid4vp.service.ScopeToDCQLMapperService;
+import org.omnione.did.oid4vc.oid4vp.util.crypto.VPTokenEncryptor;
 import org.omnione.did.verifier.v1.protocol.api.dto.InitiateRequest;
 import org.omnione.did.verifier.v1.protocol.api.dto.InitiateResponse;
 import org.omnione.did.verifier.v1.protocol.api.dto.Oid4vpResponseRequest;
@@ -66,6 +67,8 @@ class OID4VPServiceJweE2ETest {
     private DcqlScopeMappingRepository dcqlScopeMappingRepository;
     @Autowired
     private ScopeToDCQLMapperService scopeToDCQLMapperService;
+    @Autowired
+    private VPTokenEncryptor vpTokenEncryptor;
 
     private final TestJweEncryptor walletSimulator = new TestJweEncryptor();
 
@@ -103,7 +106,8 @@ class OID4VPServiceJweE2ETest {
                 .filter(s -> s.getEncKid() != null)
                 .reduce((first, second) -> second) // 가장 최근 생성분
                 .orElseThrow();
-        ECKey fullKey = ECKey.parse(session.getEncPrivateKeyJwk());
+        // enc_private_key_jwk는 VPTokenEncryptor로 암호화되어 저장되므로(at-rest 보호) 복호화 후 파싱한다.
+        ECKey fullKey = ECKey.parse(vpTokenEncryptor.decrypt(session.getEncPrivateKeyJwk()));
         ECKey publicKey = fullKey.toPublicJWK();
         assertThat(publicKey.getKeyID()).isEqualTo(session.getEncKid());
 
@@ -162,7 +166,7 @@ class OID4VPServiceJweE2ETest {
         Oid4vpSession sessionA = sessions.get(sessions.size() - 2);
         Oid4vpSession sessionB = sessions.get(sessions.size() - 1);
 
-        ECKey publicKeyA = ECKey.parse(sessionA.getEncPrivateKeyJwk()).toPublicJWK();
+        ECKey publicKeyA = ECKey.parse(vpTokenEncryptor.decrypt(sessionA.getEncPrivateKeyJwk())).toPublicJWK();
 
         // A의 공개키로 암호화하지만 payload의 state는 B의 것 — 복호화는 성공하지만 state 불일치로 거부돼야 한다.
         Map<String, Object> payload = Map.of(

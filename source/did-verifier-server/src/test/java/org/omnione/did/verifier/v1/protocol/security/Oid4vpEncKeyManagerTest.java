@@ -14,6 +14,7 @@ import org.omnione.did.base.exception.OpenDidException;
 import org.omnione.did.oid4vc.oid4vp.config.OID4VPConfig;
 import org.omnione.did.oid4vc.oid4vp.service.VerifierConfigService;
 import org.omnione.did.oid4vc.oid4vp.util.crypto.JweResponseDecryptor;
+import org.omnione.did.oid4vc.oid4vp.util.crypto.VPTokenEncryptor;
 
 import java.security.interfaces.ECPrivateKey;
 import java.util.Map;
@@ -32,9 +33,13 @@ class Oid4vpEncKeyManagerTest {
         // OID4VPConfig.Encryption 기본값 = ECDH-ES/A256GCM(Task 2 Step 6). DB 접근 없이 순수 단위 테스트하려고
         // VerifierConfigService는 Mockito로 stub한다(구체 클래스라 수동 mock 상속보다 짧음 — Task 7과 동일 컨벤션).
         // JweResponseDecryptor는 자체 의존성이 없는 순수 nimbus 래퍼(DB 접근 없음)이므로 mock 대신 실제 인스턴스를 사용한다.
+        // VPTokenEncryptor도 실제 인스턴스 사용(순수 AES-256-GCM 래퍼) — enc private key at-rest 암호화 검증 목적.
         VerifierConfigService configService = mock(VerifierConfigService.class);
-        when(configService.getOID4VPConfig()).thenReturn(new OID4VPConfig());
-        manager = new Oid4vpEncKeyManager(new ObjectMapper(), new JweResponseDecryptor(), configService);
+        OID4VPConfig config = new OID4VPConfig();
+        config.getCrypto().setVpTokenEncryptionKey(VPTokenEncryptor.generateKey());
+        when(configService.getOID4VPConfig()).thenReturn(config);
+        VPTokenEncryptor vpTokenEncryptor = new VPTokenEncryptor(configService);
+        manager = new Oid4vpEncKeyManager(new ObjectMapper(), new JweResponseDecryptor(), configService, vpTokenEncryptor);
     }
 
     @Test
@@ -77,6 +82,18 @@ class Oid4vpEncKeyManagerTest {
     }
 
     @Test
+    void toStorableJwk_encryptsAtRest_notPlaintextJwk() {
+        ECKey key = manager.generateEphemeralKeyPair();
+
+        String stored = manager.toStorableJwk(key);
+
+        // 최종 리뷰 지적: 개인키(d 포함)가 평문으로 저장되면 안 된다 — VPTokenEncryptor로 암호화된 값이어야
+        // 하므로 JWK JSON으로 그대로 파싱되지 않아야 한다(평문이라면 파싱이 성공해버릴 것).
+        assertThat(stored).doesNotContain("\"d\"").doesNotContain("\"kty\"");
+        assertThatThrownBy(() -> ECKey.parse(stored)).isInstanceOf(Exception.class);
+    }
+
+    @Test
     void extractKid_readsKidFromJweHeaderWithoutPrivateKey() throws Exception {
         ECKey key = manager.generateEphemeralKeyPair();
         JWEHeader header = new JWEHeader.Builder(JWEAlgorithm.ECDH_ES, EncryptionMethod.A256GCM)
@@ -91,6 +108,19 @@ class Oid4vpEncKeyManagerTest {
     @Test
     void loadPrivateKey_nullStoredJwk_throwsOpenDidException() {
         assertThatThrownBy(() -> manager.loadPrivateKey(null))
+                .isInstanceOf(OpenDidException.class);
+    }
+
+    @Test
+    void extractKid_headerWithoutKid_throwsInsteadOfReturningNull() throws Exception {
+        // 최종 리뷰 지적: kid가 없는 JWE는 null을 그대로 반환하면 findByEncKid(null)이
+        // enc_kid IS NULL인 세션에 잘못 매칭되거나 예외를 던질 수 있다 — 여기서 명확히 걸러야 한다.
+        ECKey key = manager.generateEphemeralKeyPair();
+        JWEHeader header = new JWEHeader.Builder(JWEAlgorithm.ECDH_ES, EncryptionMethod.A256GCM).build();
+        JWEObject jweObject = new JWEObject(header, new Payload("{}"));
+        jweObject.encrypt(new ECDHEncrypter(key.toPublicJWK()));
+
+        assertThatThrownBy(() -> manager.extractKid(jweObject.serialize()))
                 .isInstanceOf(OpenDidException.class);
     }
 }

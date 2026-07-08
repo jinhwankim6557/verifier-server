@@ -31,6 +31,7 @@ import org.omnione.did.base.exception.OpenDidException;
 import org.omnione.did.oid4vc.oid4vp.exception.OID4VPException;
 import org.omnione.did.oid4vc.oid4vp.service.VerifierConfigService;
 import org.omnione.did.oid4vc.oid4vp.util.crypto.JweResponseDecryptor;
+import org.omnione.did.oid4vc.oid4vp.util.crypto.VPTokenEncryptor;
 import org.springframework.stereotype.Component;
 
 import java.security.interfaces.ECPrivateKey;
@@ -54,6 +55,7 @@ public class Oid4vpEncKeyManager {
     private final ObjectMapper objectMapper;
     private final JweResponseDecryptor jweResponseDecryptor;
     private final VerifierConfigService verifierConfigService;
+    private final VPTokenEncryptor vpTokenEncryptor;
 
     public ECKey generateEphemeralKeyPair() {
         try {
@@ -65,7 +67,7 @@ public class Oid4vpEncKeyManager {
                     .generate();
         } catch (JOSEException e) {
             log.error("Failed to generate ephemeral EC key pair", e);
-            throw new OpenDidException(ErrorCode.OID4VP_ENC_KEY_GENERATION_FAILED);
+            throw new OpenDidException(ErrorCode.OID4VP_ENC_KEY_GENERATION_FAILED, e);
         }
     }
 
@@ -84,22 +86,31 @@ public class Oid4vpEncKeyManager {
             return objectMapper.writeValueAsString(clientMetadata);
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize client_metadata jwks", e);
-            throw new OpenDidException(ErrorCode.OID4VP_ENC_KEY_GENERATION_FAILED);
+            throw new OpenDidException(ErrorCode.OID4VP_ENC_KEY_GENERATION_FAILED, e);
         }
     }
 
-    /** 개인키(d 포함) 전체 JWK JSON. Oid4vpSession.encPrivateKeyJwk에 저장한다. */
+    /**
+     * 개인키(d 포함) 전체 JWK JSON을 {@link VPTokenEncryptor}(AES-256-GCM)로 암호화해 저장 가능한 형태로 변환한다.
+     * Oid4vpSession.encPrivateKeyJwk에 저장한다 — 세션 테이블의 vp_token과 동일한 at-rest 보호 수준을 맞춘다.
+     */
     public String toStorableJwk(ECKey ephemeralKeyPair) {
-        return ephemeralKeyPair.toJSONString();
+        return vpTokenEncryptor.encrypt(ephemeralKeyPair.toJSONString());
     }
 
     public String extractKid(String jweCompact) {
+        String kid;
         try {
-            return jweResponseDecryptor.parseHeader(jweCompact).getKeyID();
+            kid = jweResponseDecryptor.parseHeader(jweCompact).getKeyID();
         } catch (OID4VPException e) {
             log.warn("Failed to extract kid from JWE header: {}", e.getErrorMsg());
+            throw new OpenDidException(ErrorCode.OID4VP_JWE_HEADER_PARSE_FAILED, e);
+        }
+        if (kid == null || kid.isBlank()) {
+            log.warn("JWE header has no kid claim");
             throw new OpenDidException(ErrorCode.OID4VP_JWE_HEADER_PARSE_FAILED);
         }
+        return kid;
     }
 
     public ECPrivateKey loadPrivateKey(String storedJwk) {
@@ -108,10 +119,11 @@ public class Oid4vpEncKeyManager {
             throw new OpenDidException(ErrorCode.OID4VP_ENC_KEY_LOAD_FAILED);
         }
         try {
-            return ECKey.parse(storedJwk).toECPrivateKey();
-        } catch (ParseException | JOSEException e) {
+            String decryptedJwk = vpTokenEncryptor.decrypt(storedJwk);
+            return ECKey.parse(decryptedJwk).toECPrivateKey();
+        } catch (ParseException | JOSEException | RuntimeException e) {
             log.error("Failed to load stored enc private key JWK", e);
-            throw new OpenDidException(ErrorCode.OID4VP_ENC_KEY_LOAD_FAILED);
+            throw new OpenDidException(ErrorCode.OID4VP_ENC_KEY_LOAD_FAILED, e);
         }
     }
 }

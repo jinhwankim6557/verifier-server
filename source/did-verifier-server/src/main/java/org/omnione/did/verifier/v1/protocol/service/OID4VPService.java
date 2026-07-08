@@ -155,68 +155,90 @@ public class OID4VPService {
     /**
      * direct_post.jwt(JWE) 응답 처리.
      * kid로 세션·임시 개인키를 먼저 특정한 뒤 SDK 복호화 유틸에 위임한다(§5.5 ①②는 통합서버, ③④는 SDK).
-     * transaction 확보 전 단계이므로 이 메서드에서 던지는 예외는 processResponse의 catch 블록(transaction 참조)에 들어가지 않는다.
+     * kid로 세션을 아직 못 찾은 단계(맨 첫 줄)는 transaction 자체를 알 수 없어 감사기록이 불가능하다.
+     * 그 이후(세션 확보 후)의 실패는 평문 경로(processResponse)와 동일하게 VpSubmit 감사기록 및
+     * Transaction FAILED 처리를 남긴다(최종 리뷰 지적 반영 — 부인방지 목적의 VP History가 암호화 경로에서만
+     * 비어있으면 안 된다).
      */
     private Oid4vpResponseResult receiveEncryptedResponse(String jweCompact) {
         String kid = encKeyManager.extractKid(jweCompact);
         Oid4vpSession session = oid4vpSessionJpaRepository.findByEncKid(kid)
                 .orElseThrow(() -> new OpenDidException(ErrorCode.OID4VP_SESSION_MAPPING_NOT_FOUND));
 
-        JweResponseDecryptor.DecryptedResponse decrypted;
+        // Oid4vpSession.transactionId는 통합 Transaction.txId와 다른 값이라(SDK 내부 세션 식별자),
+        // processResponse와 동일하게 Oid4vpSessionMapping(state → 통합 txId)을 거쳐 조회한다.
+        Oid4vpSessionMapping mapping = sessionMappingRepository.findByState(session.getState())
+                .orElseThrow(() -> new OpenDidException(ErrorCode.OID4VP_SESSION_MAPPING_NOT_FOUND));
+        Transaction transaction = transactionService.findTransactionByTxId(mapping.getTxId());
+
+        String state;
+        String vpTokenJson;
         try {
-            ECPrivateKey privateKey = encKeyManager.loadPrivateKey(session.getEncPrivateKeyJwk());
-            decrypted = jweResponseDecryptor.decrypt(jweCompact, privateKey);
-        } catch (OID4VPException e) {
-            log.warn("OID4VP response decryption failed for kid={}: {}", kid, e.getErrorMsg());
-            throw new OpenDidException(ErrorCode.OID4VP_RESPONSE_DECRYPTION_FAILED);
-        }
+            JweResponseDecryptor.DecryptedResponse decrypted;
+            try {
+                ECPrivateKey privateKey = encKeyManager.loadPrivateKey(session.getEncPrivateKeyJwk());
+                decrypted = jweResponseDecryptor.decrypt(jweCompact, privateKey);
+            } catch (OID4VPException e) {
+                log.warn("OID4VP response decryption failed for kid={}: {}", kid, e.getErrorMsg());
+                throw new OpenDidException(ErrorCode.OID4VP_RESPONSE_DECRYPTION_FAILED, e);
+            }
 
-        Map<String, Object> payload;
-        try {
-            payload = objectMapper.readValue(decrypted.getPlaintext(), Map.class);
-        } catch (JsonProcessingException e) {
-            log.warn("Decrypted JWE payload is not valid JSON for kid={}", kid);
-            throw new OpenDidException(ErrorCode.OID4VP_RESPONSE_DECRYPTION_FAILED);
-        }
+            Map<String, Object> payload;
+            try {
+                payload = objectMapper.readValue(decrypted.getPlaintext(), Map.class);
+            } catch (JsonProcessingException e) {
+                log.warn("Decrypted JWE payload is not valid JSON for kid={}", kid);
+                throw new OpenDidException(ErrorCode.OID4VP_RESPONSE_DECRYPTION_FAILED, e);
+            }
 
-        // 의도적 범위 제외(최종 리뷰 결론, 오버사이트 아님): 이 메서드는 암호화된 error-only 응답
-        // (vp_token 없이 {error, error_description, state}만 담은 페이로드)을 아직 지원하지 않는다.
-        // 그런 페이로드는 정상 OAuth 에러로 처리되지 못하고 OID4VP_RESPONSE_DECRYPTION_FAILED로 거부된다.
-        // 원 설계의 페이로드 계약은 성공 형태(vp_token/presentation_submission/state)만 정의했고,
-        // 암호화된 error 응답 형태는 애초에 명세된 적이 없다.
-        // 참고로 평문 경로(processResponse, Task 9에서 무변경 추출·승인됨)도 동일한 근본 한계를 이미 갖고 있다:
-        // processResponse는 error/errorDescription을 authorizationService.receiveResponse(...)로 전달하지만,
-        // 그보다 먼저 oid4VPHelperService.parseVPToken(vpTokenJson)을 무조건 호출하며, SDK의
-        // OID4VPHelperService.parseVPToken(null)은 error 처리 기회를 주기 전에
-        // OID4VPException(ERR_CODE_VP_TOKEN_NULL)을 즉시 던진다(SDK 소스 확인 완료, 2026-07-06).
-        // 즉 error-only 응답을 우아하게 처리하지 못하는 것은 JWE 작업이 도입한 회귀가 아니라
-        // 평문 경로에도 이미 존재하던 특성이며, 암호화 경로는 (더 이른 시점에) 다른 에러 코드로
-        // 실패할 뿐이다. vp_token/error 모두 지원하려면 (a) processResponse의 error 우선 분기 추가와
-        // (b) 이 메서드에서 error/error_description 추출·전달이 필요하며, 이는 Task 9의 승인된 로직을
-        // 변경하는 별도 태스크/리뷰 대상이다.
-        Object vpTokenValue = payload.get("vp_token");
-        Object stateValue = payload.get("state");
-        if (vpTokenValue == null || stateValue == null) {
-            log.warn("Decrypted JWE payload missing vp_token/state for kid={}", kid);
-            throw new OpenDidException(ErrorCode.OID4VP_RESPONSE_DECRYPTION_FAILED);
-        }
+            // 의도적 범위 제외(최종 리뷰 결론, 오버사이트 아님): 이 메서드는 암호화된 error-only 응답
+            // (vp_token 없이 {error, error_description, state}만 담은 페이로드)을 아직 지원하지 않는다.
+            // 그런 페이로드는 정상 OAuth 에러로 처리되지 못하고 OID4VP_RESPONSE_DECRYPTION_FAILED로 거부된다.
+            // 원 설계의 페이로드 계약은 성공 형태(vp_token/presentation_submission/state)만 정의했고,
+            // 암호화된 error 응답 형태는 애초에 명세된 적이 없다.
+            // 참고로 평문 경로(processResponse, Task 9에서 무변경 추출·승인됨)도 동일한 근본 한계를 이미 갖고 있다:
+            // processResponse는 error/errorDescription을 authorizationService.receiveResponse(...)로 전달하지만,
+            // 그보다 먼저 oid4VPHelperService.parseVPToken(vpTokenJson)을 무조건 호출하며, SDK의
+            // OID4VPHelperService.parseVPToken(null)은 error 처리 기회를 주기 전에
+            // OID4VPException(ERR_CODE_VP_TOKEN_NULL)을 즉시 던진다(SDK 소스 확인 완료, 2026-07-06).
+            // 즉 error-only 응답을 우아하게 처리하지 못하는 것은 JWE 작업이 도입한 회귀가 아니라
+            // 평문 경로에도 이미 존재하던 특성이며, 암호화 경로는 (더 이른 시점에) 다른 에러 코드로
+            // 실패할 뿐이다. vp_token/error 모두 지원하려면 (a) processResponse의 error 우선 분기 추가와
+            // (b) 이 메서드에서 error/error_description 추출·전달이 필요하며, 이는 Task 9의 승인된 로직을
+            // 변경하는 별도 태스크/리뷰 대상이다.
+            Object vpTokenValue = payload.get("vp_token");
+            Object stateValue = payload.get("state");
+            if (vpTokenValue == null || stateValue == null) {
+                log.warn("Decrypted JWE payload missing vp_token/state for kid={}", kid);
+                throw new OpenDidException(ErrorCode.OID4VP_RESPONSE_DECRYPTION_FAILED);
+            }
 
-        // 공개키는 client_metadata로 노출되므로 누구나 세션 A의 키로 암호화하면서 페이로드에 다른 세션의
-        // state를 넣을 수 있다. kid로 찾은 세션과 복호화된 state가 다른 세션을 가리키면 거부해 매핑 오염을 막는다.
-        if (!session.getState().equals(stateValue.toString())) {
-            log.warn("Decrypted JWE state does not match session bound to kid={}: sessionState={}, payloadState={}",
-                    kid, session.getState(), stateValue);
-            throw new OpenDidException(ErrorCode.OID4VP_RESPONSE_DECRYPTION_FAILED);
-        }
+            // 공개키는 client_metadata로 노출되므로 누구나 세션 A의 키로 암호화하면서 페이로드에 다른 세션의
+            // state를 넣을 수 있다. kid로 찾은 세션과 복호화된 state가 다른 세션을 가리키면 거부해 매핑 오염을 막는다.
+            if (!session.getState().equals(stateValue.toString())) {
+                log.warn("Decrypted JWE state does not match session bound to kid={}: sessionState={}, payloadState={}",
+                        kid, session.getState(), stateValue);
+                throw new OpenDidException(ErrorCode.OID4VP_RESPONSE_DECRYPTION_FAILED);
+            }
 
-        try {
-            String vpTokenJson = vpTokenValue instanceof String
+            state = stateValue.toString();
+            vpTokenJson = vpTokenValue instanceof String
                     ? (String) vpTokenValue
                     : objectMapper.writeValueAsString(vpTokenValue);
-            return processResponse(stateValue.toString(), vpTokenJson, null, null);
+        } catch (OpenDidException e) {
+            vpSubmitAuditService.recordFailure(transaction.getId(), null, null, e.getErrorCode().getCode(), null);
+            transactionService.updateTransactionStatus(transaction.getId(), TransactionStatus.FAILED);
+            throw e;
         } catch (JsonProcessingException e) {
-            throw new OpenDidException(ErrorCode.OID4VP_RESPONSE_DECRYPTION_FAILED);
+            OpenDidException wrapped = new OpenDidException(ErrorCode.OID4VP_RESPONSE_DECRYPTION_FAILED, e);
+            vpSubmitAuditService.recordFailure(transaction.getId(), null, null, wrapped.getErrorCode().getCode(), null);
+            transactionService.updateTransactionStatus(transaction.getId(), TransactionStatus.FAILED);
+            throw wrapped;
         }
+
+        // processResponse는 자기 자신의 성공/실패 감사기록·Transaction 상태 처리를 이미 완결하므로
+        // (위 catch에 포함시키면 이중 기록됨) try 블록 밖에서 호출한다.
+        return processResponse(state, vpTokenJson, null, null);
     }
 
     /**

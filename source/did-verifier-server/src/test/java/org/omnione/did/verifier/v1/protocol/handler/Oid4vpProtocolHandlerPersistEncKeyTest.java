@@ -8,6 +8,7 @@ import org.omnione.did.base.db.repository.Oid4vpSessionJpaRepository;
 import org.omnione.did.oid4vc.oid4vp.config.OID4VPConfig;
 import org.omnione.did.oid4vc.oid4vp.service.VerifierConfigService;
 import org.omnione.did.oid4vc.oid4vp.util.crypto.JweResponseDecryptor;
+import org.omnione.did.oid4vc.oid4vp.util.crypto.VPTokenEncryptor;
 import org.omnione.did.verifier.v1.protocol.security.Oid4vpEncKeyManager;
 
 import java.util.Optional;
@@ -23,9 +24,12 @@ class Oid4vpProtocolHandlerPersistEncKeyTest {
         // VerifierConfigService는 구체 클래스라 Mockito로 stub한다(Oid4vpEncKeyManagerTest와 동일 컨벤션).
         // JweResponseDecryptor는 자체 의존성 없는 순수 nimbus 래퍼라 실제 인스턴스를 사용한다.
         VerifierConfigService configService = mock(VerifierConfigService.class);
-        when(configService.getOID4VPConfig()).thenReturn(new OID4VPConfig());
+        OID4VPConfig config = new OID4VPConfig();
+        config.getCrypto().setVpTokenEncryptionKey(VPTokenEncryptor.generateKey());
+        when(configService.getOID4VPConfig()).thenReturn(config);
         Oid4vpEncKeyManager encKeyManager =
-                new Oid4vpEncKeyManager(new ObjectMapper(), new JweResponseDecryptor(), configService);
+                new Oid4vpEncKeyManager(new ObjectMapper(), new JweResponseDecryptor(), configService,
+                        new VPTokenEncryptor(configService));
         Oid4vpSession existing = Oid4vpSession.builder()
                 .transactionId("tx-1").state("state-1").status("REQUEST_FETCHED")
                 .requestId("req-1").createdAt(1L).build();
