@@ -20,12 +20,6 @@ source/did-demo-server/
 
 # 작업 메모 / PoC 자산
 AGENTS.md
-designtemplate/CLAUDE.md
-designtemplate/Rjemfjr.md
-designtemplate/plan.html
-designtemplate/unified-verifier/
-designtemplate/unified-verifier-mobile/
-designtemplate/unified-verifier-spec-kit/
 
 # AI 작업용 문서 / 설계 초안 (로컬 전용, 원격 제거)
 CLAUDE.md
