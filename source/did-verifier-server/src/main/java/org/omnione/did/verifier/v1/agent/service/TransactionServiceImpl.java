@@ -132,6 +132,10 @@ public class TransactionServiceImpl implements TransactionService {
      * @throws OpenDidException if the transaction is not found.
      */
     @Override
+    // 호출부(OID4VPService.receiveResponse 등)가 실패 시 예외를 재던지는 @Transactional 메서드라,
+    // 같은 트랜잭션에 묶이면 상태 갱신(FAILED 등)까지 함께 롤백돼버린다. REQUIRES_NEW로 독립 커밋시킨다
+    // — 바로 아래 updateErrorTransactionStatus와 동일한 패턴.
+    @org.springframework.transaction.annotation.Transactional(propagation = Propagation.REQUIRES_NEW)
     public void updateTransactionStatus(Long id, TransactionStatus transactionStatus) {
         Optional<Transaction> optionalTransaction = transactionRepository.findById(id);
         if (optionalTransaction.isEmpty()) {

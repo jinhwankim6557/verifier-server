@@ -70,7 +70,16 @@ public class CredentialStatusChecker {
                     throw new OpenDidException(ErrorCode.STATUS_LIST_CREDENTIAL_SUSPENDED);
                 }
                 case 3 -> log.debug("APPLICATION_SPECIFIC status at idx={}, skipping", ref.idx());
-                default -> log.warn("Unknown status value {} at idx={}, treating as VALID", status, ref.idx());
+                default -> {
+                    // IETF status list 초안은 0~3만 정의하고 나머지는 예약값이다. 예약값을 "안전하게 통과"로
+                    // 처리하면(CRL/OCSP에서도 알려진 안티패턴) 향후 스펙 확장이나 손상된 값으로 폐기 상태가
+                    // 은폐될 수 있어, fetch 실패와 동일한 fail-open/fail-closed 정책을 그대로 적용한다.
+                    if (verifierProperty.getStatusList().isFailOnFetchError()) {
+                        log.warn("Unknown status value {} at idx={}, rejecting (FAIL-CLOSED)", status, ref.idx());
+                        throw new OpenDidException(ErrorCode.STATUS_LIST_TOKEN_INVALID);
+                    }
+                    log.warn("Unknown status value {} at idx={}, treating as VALID (FAIL-OPEN)", status, ref.idx());
+                }
             }
         } catch (OpenDidException e) {
             throw e;

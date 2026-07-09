@@ -119,6 +119,37 @@ class CredentialStatusCheckerTest {
     }
 
     @Test
+    @DisplayName("알 수 없는 status 값(예약값) + failOnFetchError=true 이면 STATUS_LIST_TOKEN_INVALID 예외 (FAIL-CLOSED)")
+    void unknown_status_with_fail_closed_throws() throws Exception {
+        when(verifierProperty.getStatusList()).thenReturn(props);
+        when(parser.parse(FAKE_SD_JWT)).thenReturn(Optional.of(new StatusListRef(0, URI)));
+        when(fetcher.fetch(URI)).thenReturn(FAKE_TOKEN_JWT);
+        when(tokenVerifier.verify(FAKE_TOKEN_JWT, URI))
+                .thenReturn(new StatusListTokenPayload(4, "lst", 3600, 9999999999L));
+        when(decoder.extract("lst", 4, 0)).thenReturn(9);
+
+        assertThatThrownBy(() -> checker.checkAll(Map.of("cred1", List.of(FAKE_SD_JWT))))
+                .isInstanceOf(OpenDidException.class)
+                .extracting(e -> ((OpenDidException) e).getErrorCode())
+                .isEqualTo(ErrorCode.STATUS_LIST_TOKEN_INVALID);
+    }
+
+    @Test
+    @DisplayName("알 수 없는 status 값(예약값) + failOnFetchError=false 이면 통과 (FAIL-OPEN)")
+    void unknown_status_with_fail_open_passes() throws Exception {
+        props.setFailOnFetchError(false);
+        when(verifierProperty.getStatusList()).thenReturn(props);
+        when(parser.parse(FAKE_SD_JWT)).thenReturn(Optional.of(new StatusListRef(0, URI)));
+        when(fetcher.fetch(URI)).thenReturn(FAKE_TOKEN_JWT);
+        when(tokenVerifier.verify(FAKE_TOKEN_JWT, URI))
+                .thenReturn(new StatusListTokenPayload(4, "lst", 3600, 9999999999L));
+        when(decoder.extract("lst", 4, 0)).thenReturn(9);
+
+        assertThatCode(() -> checker.checkAll(Map.of("cred1", List.of(FAKE_SD_JWT))))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
     @DisplayName("SD-JWT가 아닌 포맷(Map)은 건너뜀")
     void non_sdjwt_credential_is_skipped() throws Exception {
         Map<String, Object> jsonVp = Map.of("type", "VerifiablePresentation");
