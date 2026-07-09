@@ -26,3 +26,30 @@ designtemplate/plan.html
 designtemplate/unified-verifier/
 designtemplate/unified-verifier-mobile/
 designtemplate/unified-verifier-spec-kit/
+
+# AI 작업용 문서 / 설계 초안 (로컬 전용, 원격 제거)
+CLAUDE.md
+PROTOCOL_ROUTING_DESIGN.md
+AI-Mockup-Guide.md
+DEMO_SCENARIO.md
+DEMO_UI_DESIGN.md
+SCENARIO_COMPARISON.md
+OID4VP_IMPLEMENTATION_PLAN.md
+OID4VP_JWE_DESIGN.md
+OID4VP_JWE_RESPONSE_ENCRYPTION.md
+SD-JWT_서명검증_이슈_분석.md
+STATUS_LIST_INTEGRATION.md
+docs/superpowers/
+docs/OID4VP_ADMIN_SPEC_ANALYSIS.md
+docs/did-verifier-refactoring-design.md
+docs/team-review-draft.md
+.superpowers/
+
+# Mock/demo HTML (로컬 전용, 원격 제거)
+admin-oid4vp-mockup.html
+aos-ca-wallet-mock.html
+aos-wallet-mock.html
+badge-sample.html
+demo-presentation.html
+verification-dashboard-mockup.html
+source/mock-wallet/index.html
