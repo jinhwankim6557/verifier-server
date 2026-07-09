@@ -38,4 +38,17 @@ public class VerifierProperty {
     private String domain;
     private String tasUrl;
     private ArrayList<String> verifierEndPoints = new ArrayList<>();
+
+    @Getter
+    @Setter
+    public static class StatusListProperties {
+        private boolean failOnFetchError = true;
+        private long maxCacheTtlSeconds = 86400;
+        private long minCacheTtlSeconds = 60;
+        // 압축해제 결과 최대 크기(바이트). 100만 엔트리 status list도 bits=8 기준 125KB 수준이라
+        // 1MB면 정상적인 status list는 전부 여유 있게 수용하면서 decompression bomb은 막는다.
+        private long maxDecompressedBytes = 1_048_576;
+    }
+
+    private StatusListProperties statusList = new StatusListProperties();
 }

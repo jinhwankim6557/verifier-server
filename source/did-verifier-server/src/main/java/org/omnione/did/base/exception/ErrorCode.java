@@ -155,7 +155,14 @@ public enum ErrorCode {
     OID4VP_JWE_HEADER_PARSE_FAILED("SSRVVRF01311", "Failed to parse JWE header.", 400),
     OID4VP_RESPONSE_DECRYPTION_FAILED("SSRVVRF01312", "Failed to decrypt OID4VP JWE response.", 400),
     OID4VP_ENCRYPTION_ALGORITHM_NOT_SUPPORTED("SSRVVRF01313",
-            "OID4VP encryption alg/enc is fixed and cannot be changed to a different value.", 400);
+            "OID4VP encryption alg/enc is fixed and cannot be changed to a different value.", 400),
+
+    // Status List Errors (1400~1499)
+    STATUS_LIST_FETCH_FAILED("SSRVVRF01401", "Failed to fetch status list token.", 500),
+    STATUS_LIST_TOKEN_INVALID("SSRVVRF01402", "Status list token validation failed.", 400),
+    STATUS_LIST_CREDENTIAL_INVALID("SSRVVRF01403", "Credential has been revoked.", 400),
+    STATUS_LIST_CREDENTIAL_SUSPENDED("SSRVVRF01404", "Credential is suspended.", 400),
+    STATUS_LIST_INDEX_OUT_OF_BOUNDS("SSRVVRF01405", "Status list index is out of bounds.", 400);
 
 
     private final String code;

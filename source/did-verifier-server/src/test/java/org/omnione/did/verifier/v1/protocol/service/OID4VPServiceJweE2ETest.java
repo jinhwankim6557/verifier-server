@@ -101,6 +101,15 @@ class OID4VPServiceJweE2ETest {
         InitiateResponse initiateResponse = protocolHandler.initiate(initiateRequest);
         assertThat(initiateResponse.getSessionId()).isNotBlank();
 
+        // TransactionServiceImpl.updateTransactionStatus는 REQUIRES_NEW라 별도 물리 트랜잭션(커넥션)에서
+        // 실행된다. 운영에서는 initiate와 response 제출이 서로 다른 HTTP 요청(=이미 커밋된 상태)이라 항상
+        // 문제없이 조회되지만, 이 테스트처럼 @Transactional로 둘을 한 트랜잭션에 몰아넣으면 아직 커밋 전인
+        // Transaction row가 REQUIRES_NEW 쪽에는 보이지 않아 "Transaction not found"로 실패한다.
+        // 여기서 명시적으로 커밋해 운영 시나리오(초기화 요청이 이미 커밋된 상태)와 동일하게 맞춘다.
+        org.springframework.test.context.transaction.TestTransaction.flagForCommit();
+        org.springframework.test.context.transaction.TestTransaction.end();
+        org.springframework.test.context.transaction.TestTransaction.start();
+
         // 2. 방금 생성된 세션에서 enc 공개키(JWK) 복원 — Wallet이 Authorization Request JWT에서 읽는 것과 동일한 값
         Oid4vpSession session = sessionRepository.findAll().stream()
                 .filter(s -> s.getEncKid() != null)

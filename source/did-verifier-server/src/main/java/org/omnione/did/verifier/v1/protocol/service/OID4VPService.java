@@ -33,6 +33,7 @@ import org.omnione.did.verifier.v1.agent.service.DidDocService;
 import org.omnione.did.verifier.v1.agent.service.FileWalletService;
 import org.omnione.did.verifier.v1.agent.service.TransactionService;
 import org.omnione.did.verifier.v1.common.service.VpSubmitAuditService;
+import org.omnione.did.verifier.v1.protocol.service.status.CredentialStatusChecker;
 import org.omnione.did.verifier.v1.protocol.api.dto.Oid4vpResponseRequest;
 import org.omnione.did.verifier.v1.protocol.api.dto.Oid4vpResponseResult;
 import org.omnione.did.verifier.v1.protocol.security.MdocTrustAnchorLoader;
@@ -62,6 +63,7 @@ public class OID4VPService {
     private final VpSubmitAuditService vpSubmitAuditService;
     private final Oid4vpEncKeyManager encKeyManager;
     private final JweResponseDecryptor jweResponseDecryptor;
+    private final CredentialStatusChecker credentialStatusChecker;
 
     /**
      * Authorization Request JWT 조회 (Wallet이 request_uri로 호출)
@@ -301,6 +303,7 @@ public class OID4VPService {
             }
 
             if (result.isSuccess()) {
+                credentialStatusChecker.checkAll(vpTokenMap);
                 vpSubmitAuditService.recordSuccess(transaction.getId(), vpTokenJson, holderDid, vpFormat);
                 transactionService.updateTransactionStatus(transaction.getId(), TransactionStatus.COMPLETED);
                 log.debug("*** OID4VP response processed. txId={}, status=COMPLETED ***", mapping.getTxId());

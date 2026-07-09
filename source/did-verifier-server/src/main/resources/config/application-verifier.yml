@@ -24,6 +24,14 @@ verifier:
   verifierEndPoints:
     - "http://127.0.0.1:8092/verifier/api/v1"
 
+  status-list:
+    # true=FAIL-CLOSED(엄격, 기본), false=FAIL-OPEN(가용성 우선)
+    fail-on-fetch-error: true
+    # Status List Token의 ttl claim 상한 (초)
+    max-cache-ttl-seconds: 86400
+    # Status List Token의 ttl claim 하한 (초)
+    min-cache-ttl-seconds: 60
+
 # mdoc X.509 Trust Anchor 설정
 # MdocTrustAnchorLoader가 사용합니다
 oid4vp:
