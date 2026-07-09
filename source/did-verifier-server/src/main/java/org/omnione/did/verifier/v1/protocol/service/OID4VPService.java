@@ -256,6 +256,10 @@ public class OID4VPService {
 
         Transaction transaction = transactionService.findTransactionByTxId(mapping.getTxId());
 
+        // catch 블록에서도 감사기록에 쓸 수 있도록 try 밖에 선언한다. try 안에서 채워지기 전에 예외가 나면
+        // null로 남는데, 이는 "아직 해석 전"이라는 의미라 이전 동작과 동일하다.
+        String holderDid = null;
+        String vpFormat = null;
         try {
             // 2. Transaction 유효성 확인
             validateTransaction(transaction);
@@ -271,10 +275,10 @@ public class OID4VPService {
             log.debug("vpTokenMap keys: {}", vpTokenMap.keySet());
 
             boolean hasMdoc = containsMdocFormat(dcqlQuery);
-            String vpFormat = resolveSubmitFormat(dcqlQuery);
+            vpFormat = resolveSubmitFormat(dcqlQuery);
             List<String> issuerPublicKeys = resolveIssuerPublicKeys(vpTokenMap);
             List<String> holderPublicKeys = resolveHolderPublicKeys(vpTokenMap);
-            String holderDid = resolveHolderDid(vpTokenMap).orElse(null);
+            holderDid = resolveHolderDid(vpTokenMap).orElse(null);
             log.debug("Resolved issuerPublicKeys: {}, holderPublicKeys: {}, holderDid: {}, hasMdoc: {}",
                     issuerPublicKeys.size(), holderPublicKeys.size(), holderDid, hasMdoc);
 
@@ -326,13 +330,13 @@ public class OID4VPService {
                     .build();
 
         } catch (OpenDidException e) {
-            vpSubmitAuditService.recordFailure(transaction.getId(), vpTokenJson, null, e.getErrorCode().getCode(), null);
+            vpSubmitAuditService.recordFailure(transaction.getId(), vpTokenJson, holderDid, e.getErrorCode().getCode(), vpFormat);
             transactionService.updateTransactionStatus(transaction.getId(), TransactionStatus.FAILED);
             throw e;
         } catch (OID4VPException e) {
             // vp_token 파싱 등 SDK 처리 실패: 실패로 기록하고 FAILED 결과 반환(컨트롤러에서 500으로 변환)
             log.error("OID4VP response failed: {} - {}", e.getErrorCode(), e.getErrorMsg(), e);
-            vpSubmitAuditService.recordFailure(transaction.getId(), vpTokenJson, null, e.getErrorCode(), null);
+            vpSubmitAuditService.recordFailure(transaction.getId(), vpTokenJson, holderDid, e.getErrorCode(), vpFormat);
             transactionService.updateTransactionStatus(transaction.getId(), TransactionStatus.FAILED);
             return Oid4vpResponseResult.builder()
                     .sessionId(mapping.getTxId())
