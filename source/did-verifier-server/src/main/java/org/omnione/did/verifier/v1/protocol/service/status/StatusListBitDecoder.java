@@ -26,7 +26,7 @@ public class StatusListBitDecoder {
             throw new OpenDidException(ErrorCode.STATUS_LIST_TOKEN_INVALID);
         }
 
-        byte[] compressed = Base64.getUrlDecoder().decode(padBase64(lst));
+        byte[] compressed = JwtPayloadUtils.decodeBase64Url(lst);
         byte[] bytes = decompress(compressed);
 
         int bitPosition = idx * bits;
@@ -74,10 +74,5 @@ public class StatusListBitDecoder {
             }
         }
         return baos.toByteArray();
-    }
-
-    private String padBase64(String base64url) {
-        int padding = (4 - base64url.length() % 4) % 4;
-        return base64url + "=".repeat(padding);
     }
 }

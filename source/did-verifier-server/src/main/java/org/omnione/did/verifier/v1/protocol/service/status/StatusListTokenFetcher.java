@@ -1,6 +1,8 @@
 package org.omnione.did.verifier.v1.protocol.service.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.extern.slf4j.Slf4j;
 import org.omnione.did.base.exception.ErrorCode;
 import org.omnione.did.base.exception.OpenDidException;
@@ -14,17 +16,25 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.time.Instant;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
 public class StatusListTokenFetcher {
 
+    // status list uri별 엔트리 상한. 정상 배포에서는 issuer/status list 개수가 이보다 훨씬 적고,
+    // 이 값은 사용자가 제어 가능한 credential claim(status.status_list.uri)에서 오는 캐시 키가
+    // 무제한으로 쌓이는 것(메모리 고갈형 DoS)을 막기 위한 상한이다.
+    private static final int MAX_CACHE_SIZE = 1000;
+
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final RestTemplate restTemplate;
     private final VerifierProperty.StatusListProperties props;
-    private final ConcurrentHashMap<String, CacheEntry> cache = new ConcurrentHashMap<>();
+    // TTL은 각 status list token의 ttl claim에 따라 달라져 Caffeine의 전역 expireAfterWrite로는
+    // 표현할 수 없다 — 기존과 동일하게 조회 시 expiresAt을 직접 검사하고, maximumSize로 크기만 제한한다.
+    private final Cache<String, CacheEntry> cache = Caffeine.newBuilder()
+            .maximumSize(MAX_CACHE_SIZE)
+            .build();
 
     public StatusListTokenFetcher(RestTemplate restTemplate, VerifierProperty verifierProperty) {
         this.restTemplate = restTemplate;
@@ -43,7 +53,7 @@ public class StatusListTokenFetcher {
         }
         validateNotPrivateNetwork(parsed);
 
-        CacheEntry cached = cache.get(uri);
+        CacheEntry cached = cache.getIfPresent(uri);
         if (cached != null && cached.expiresAt.isAfter(Instant.now())) {
             log.debug("Status list cache HIT for uri: {}", uri);
             return cached.jwt;
@@ -103,12 +113,7 @@ public class StatusListTokenFetcher {
     // JWT payload에서 ttl claim 추출. 없으면 minCacheTtlSeconds 사용.
     private long parseTtl(String jwt) {
         try {
-            String[] parts = jwt.split("\\.");
-            if (parts.length < 2) return props.getMinCacheTtlSeconds();
-            String padded = parts[1] + "=".repeat((4 - parts[1].length() % 4) % 4);
-            byte[] payloadBytes = java.util.Base64.getUrlDecoder().decode(padded);
-            com.fasterxml.jackson.databind.JsonNode node =
-                    OBJECT_MAPPER.readTree(payloadBytes);
+            com.fasterxml.jackson.databind.JsonNode node = JwtPayloadUtils.parseJwtPayload(OBJECT_MAPPER, jwt);
             long ttl = node.path("ttl").asLong(0);
             if (ttl <= 0) ttl = props.getMinCacheTtlSeconds();
             return Math.min(Math.max(ttl, props.getMinCacheTtlSeconds()), props.getMaxCacheTtlSeconds());
