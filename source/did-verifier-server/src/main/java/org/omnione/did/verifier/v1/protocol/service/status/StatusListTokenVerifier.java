@@ -81,8 +81,19 @@ public class StatusListTokenVerifier {
     }
 
     private ECPublicKey resolvePublicKey(String kid) {
-        String did = kid.contains("#") ? kid.substring(0, kid.indexOf('#')) : kid;
-        String keyId = kid.contains("#") ? kid.substring(kid.indexOf('#') + 1) : "";
+        // "did:omn:issuer?versionId=1#auth" 형태를 고려해 '#' 이전에 '?'가 있으면 그 지점을 DID 경계로 삼는다.
+        // (OID4VPService.extractDid/extractKeyId와 동일한 파싱 규칙)
+        int queryIdx = kid.indexOf('?');
+        int hashIdx = kid.indexOf('#');
+        String did;
+        if (queryIdx > 0) {
+            did = kid.substring(0, queryIdx);
+        } else if (hashIdx > 0) {
+            did = kid.substring(0, hashIdx);
+        } else {
+            did = kid;
+        }
+        String keyId = hashIdx >= 0 ? kid.substring(hashIdx + 1) : "";
 
         DidDocument didDoc = didDocService.getDidDocument(did);
         VerificationMethod vm = BaseCoreDidUtil.getVerificationMethod(didDoc, keyId);

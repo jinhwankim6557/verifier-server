@@ -45,11 +45,11 @@ class StatusListTokenFetcherTest {
     @Test
     @DisplayName("정상 응답이면 JWT 문자열 반환")
     void fetch_returns_jwt_on_success() {
-        mockServer.expect(requestTo("https://issuer.example.com/statuslists/1"))
+        mockServer.expect(requestTo("https://example.com/statuslists/1"))
                 .andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess("header.payload.sig", MediaType.parseMediaType("application/statuslist+jwt")));
 
-        String jwt = fetcher.fetch("https://issuer.example.com/statuslists/1");
+        String jwt = fetcher.fetch("https://example.com/statuslists/1");
 
         assertThat(jwt).isEqualTo("header.payload.sig");
         mockServer.verify();
@@ -58,11 +58,11 @@ class StatusListTokenFetcherTest {
     @Test
     @DisplayName("캐시 HIT 이면 HTTP 요청 1회만 발생")
     void fetch_uses_cache_on_second_call() {
-        mockServer.expect(requestTo("https://issuer.example.com/statuslists/1"))
+        mockServer.expect(requestTo("https://example.com/statuslists/1"))
                 .andRespond(withSuccess("header.payload.sig", MediaType.parseMediaType("application/statuslist+jwt")));
 
-        fetcher.fetch("https://issuer.example.com/statuslists/1");
-        fetcher.fetch("https://issuer.example.com/statuslists/1"); // 캐시 HIT — HTTP 호출 없음
+        fetcher.fetch("https://example.com/statuslists/1");
+        fetcher.fetch("https://example.com/statuslists/1"); // 캐시 HIT — HTTP 호출 없음
 
         mockServer.verify(); // expect 1회만 등록했으므로 2회 호출 시 실패
     }
@@ -70,12 +70,49 @@ class StatusListTokenFetcherTest {
     @Test
     @DisplayName("5xx 응답 시 STATUS_LIST_FETCH_FAILED 예외")
     void fetch_throws_on_server_error() {
-        mockServer.expect(requestTo("https://issuer.example.com/statuslists/1"))
+        mockServer.expect(requestTo("https://example.com/statuslists/1"))
                 .andRespond(withServerError());
 
-        assertThatThrownBy(() -> fetcher.fetch("https://issuer.example.com/statuslists/1"))
+        assertThatThrownBy(() -> fetcher.fetch("https://example.com/statuslists/1"))
                 .isInstanceOf(OpenDidException.class)
                 .extracting(e -> ((OpenDidException) e).getErrorCode())
                 .isEqualTo(ErrorCode.STATUS_LIST_FETCH_FAILED);
+    }
+
+    @Test
+    @DisplayName("loopback 주소로 resolve되는 호스트는 HTTP 요청 없이 즉시 거부 (SSRF 방지)")
+    void fetch_rejects_loopback_host_without_network_call() {
+        assertThatThrownBy(() -> fetcher.fetch("https://localhost/statuslists/1"))
+                .isInstanceOf(OpenDidException.class)
+                .extracting(e -> ((OpenDidException) e).getErrorCode())
+                .isEqualTo(ErrorCode.STATUS_LIST_FETCH_FAILED);
+
+        mockServer.verify(); // 등록된 expect가 없으므로 실제 호출이 없었어야 통과
+    }
+
+    @Test
+    @DisplayName("127.0.0.1로 직접 지정한 호스트도 즉시 거부 (SSRF 방지)")
+    void fetch_rejects_loopback_ip_literal_without_network_call() {
+        assertThatThrownBy(() -> fetcher.fetch("https://127.0.0.1/statuslists/1"))
+                .isInstanceOf(OpenDidException.class)
+                .extracting(e -> ((OpenDidException) e).getErrorCode())
+                .isEqualTo(ErrorCode.STATUS_LIST_FETCH_FAILED);
+
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("응답이 3xx 리다이렉트면 따라가지 않고 STATUS_LIST_FETCH_FAILED 예외")
+    void fetch_throws_on_redirect_response() {
+        mockServer.expect(requestTo("https://example.com/statuslists/1"))
+                .andRespond(withStatus(org.springframework.http.HttpStatus.FOUND)
+                        .location(java.net.URI.create("https://internal.example.net/secret")));
+
+        assertThatThrownBy(() -> fetcher.fetch("https://example.com/statuslists/1"))
+                .isInstanceOf(OpenDidException.class)
+                .extracting(e -> ((OpenDidException) e).getErrorCode())
+                .isEqualTo(ErrorCode.STATUS_LIST_FETCH_FAILED);
+
+        mockServer.verify();
     }
 }

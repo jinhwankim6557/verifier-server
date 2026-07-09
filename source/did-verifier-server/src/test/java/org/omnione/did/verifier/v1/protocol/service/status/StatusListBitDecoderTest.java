@@ -3,6 +3,8 @@ package org.omnione.did.verifier.v1.protocol.service.status;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.omnione.did.base.exception.OpenDidException;
+import org.omnione.did.base.property.VerifierProperty;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -12,7 +14,7 @@ class StatusListBitDecoderTest {
 
     @BeforeEach
     void setUp() {
-        decoder = new StatusListBitDecoder();
+        decoder = new StatusListBitDecoder(new VerifierProperty());
     }
 
     @Test
@@ -62,5 +64,25 @@ class StatusListBitDecoderTest {
         assertThatThrownBy(() -> decoder.extract(lst, 1, 8))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("out of bounds");
+    }
+
+    @Test
+    @DisplayName("bits가 표준값(1/2/4/8)이 아니면 예외 — 바이트 경계를 넘는 잘못된 디코딩 방지")
+    void nonStandardBits_throws() {
+        String lst = StatusListBitDecoder.compress(new byte[]{0x00, 0x00});
+        assertThatThrownBy(() -> decoder.extract(lst, 3, 0))
+                .isInstanceOf(OpenDidException.class);
+    }
+
+    @Test
+    @DisplayName("압축 해제 결과가 설정된 최대 크기를 넘으면 예외 (decompression bomb 방지)")
+    void decompressedTooLarge_throws() {
+        VerifierProperty property = new VerifierProperty();
+        property.getStatusList().setMaxDecompressedBytes(4);
+        StatusListBitDecoder tinyLimitDecoder = new StatusListBitDecoder(property);
+        String lst = StatusListBitDecoder.compress(new byte[100]);
+
+        assertThatThrownBy(() -> tinyLimitDecoder.extract(lst, 1, 0))
+                .isInstanceOf(OpenDidException.class);
     }
 }
