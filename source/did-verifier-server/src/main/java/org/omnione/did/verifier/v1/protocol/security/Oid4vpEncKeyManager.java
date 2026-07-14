@@ -105,6 +105,14 @@ public class Oid4vpEncKeyManager {
         } catch (OID4VPException e) {
             log.warn("Failed to extract kid from JWE header: {}", e.getErrorMsg());
             throw new OpenDidException(ErrorCode.OID4VP_JWE_HEADER_PARSE_FAILED, e);
+        } catch (RuntimeException e) {
+            // Nimbus JWEHeader.parse()는 enc 필드가 빠진 것처럼 손상된 헤더에 대해 OID4VPException이 아니라
+            // NullPointerException 같은 원시 예외를 던진다(EncryptionMethod.parse에서 확인됨). 이걸 안 잡으면
+            // 컨트롤러까지 새어나가 GlobalControllerAdvice도 못 잡고, GET 전용 에러 페이지(SpaController)로
+            // 내부 forward되면서 원인 불명의 405로 마스킹된다.
+            log.warn("Failed to extract kid from JWE header (unexpected {}): {}",
+                    e.getClass().getSimpleName(), e.getMessage());
+            throw new OpenDidException(ErrorCode.OID4VP_JWE_HEADER_PARSE_FAILED, e);
         }
         if (kid == null || kid.isBlank()) {
             log.warn("JWE header has no kid claim");

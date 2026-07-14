@@ -16,6 +16,7 @@ import org.omnione.did.base.exception.ErrorCode;
 import org.omnione.did.base.exception.OpenDidException;
 import org.omnione.did.oid4vc.oid4vp.dto.ServiceResult;
 import org.omnione.did.oid4vc.oid4vp.service.InitiationService;
+import org.omnione.did.verifier.v1.admin.service.Oid4vpConfigService;
 import org.omnione.did.verifier.v1.agent.service.TransactionService;
 import org.omnione.did.verifier.v1.common.PolicyCacheService;
 import org.omnione.did.verifier.v1.protocol.api.dto.InitiateRequest;
@@ -38,6 +39,9 @@ public class Oid4vpProtocolHandler implements ProtocolHandler {
     private final Oid4vpSessionJpaRepository oid4vpSessionJpaRepository;
     private final InitiationService initiationService;
     private final Oid4vpEncKeyManager encKeyManager;
+    private final Oid4vpConfigService oid4vpConfigService;
+
+    private static final String DEFAULT_RESPONSE_MODE = "direct_post.jwt";
 
     @Override
     public ProtocolType getProtocolType() {
@@ -64,10 +68,17 @@ public class Oid4vpProtocolHandler implements ProtocolHandler {
             String clientMetadataJson = encKeyManager.buildClientMetadataJson(ephemeralKeyPair);
 
             // 4. SDK InitiationService 호출 (direct_post.jwt + enc jwks 주입)
+            // responseMode는 admin oid4vp_config의 "responseMode" 키에서 읽는다(현재는 direct_post.jwt로
+            // 저장 시점에 고정 검증됨 — Oid4vpConfigService.validateResponseMode). admin 화면은 읽기전용이라
+            // 지금은 사실상 상수지만, 나중에 다른 모드를 지원하게 되면 이 한 곳만 바뀌면 되도록 미리 설정에서 읽는다.
+            Object configuredResponseMode = oid4vpConfigService.getConfig().get("responseMode");
+            String responseMode = configuredResponseMode != null
+                    ? configuredResponseMode.toString() : DEFAULT_RESPONSE_MODE;
+
             ServiceResult<Map<String, Object>> result = initiationService.initiateVerification(
                     null,                  // dcqlQuery (scope 기반이므로 null)
                     scope,                 // scope
-                    "direct_post.jwt",     // responseMode — JWE 암호화 응답 요구
+                    responseMode,          // responseMode — JWE 암호화 응답 요구
                     clientMetadataJson,    // clientMetadata — enc jwks + encrypted_response_enc_values_supported
                     true                   // useRequestUri
             );

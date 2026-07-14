@@ -146,12 +146,31 @@ public class OID4VPService {
         if (isEncrypted(request)) {
             return receiveEncryptedResponse(request.getResponse());
         }
+        rejectIfEncryptionRequired(request.getState());
         return processResponse(request.getState(), request.getVpToken(),
                 request.getError(), request.getErrorDescription());
     }
 
     static boolean isEncrypted(Oid4vpResponseRequest request) {
         return request.getResponse() != null && !request.getResponse().isBlank();
+    }
+
+    /**
+     * direct_post.jwt로 개시된 세션인데 response(JWE) 없이 평문으로 제출되면 거부한다.
+     * 이 체크가 없으면 response_mode=direct_post.jwt는 Wallet에게 "이렇게 해달라"는 광고에
+     * 그치고 서버가 실제로 강제하지 않는 셈이라, JWE를 도입한 목적(로그·프록시 구간에서의
+     * claim 평문 노출 방지)이 평문 제출 한 번으로 무력화된다.
+     * state가 없거나 매핑된 세션이 없으면 여기서는 판단하지 않고 processResponse가
+     * 기존과 동일하게 OID4VP_SESSION_MAPPING_NOT_FOUND로 처리하게 둔다.
+     */
+    private void rejectIfEncryptionRequired(String state) {
+        if (state == null || state.isBlank()) return;
+        oid4vpSessionJpaRepository.findByState(state).ifPresent(session -> {
+            if ("direct_post.jwt".equals(session.getResponseMode())) {
+                log.warn("Plaintext response rejected — session requires direct_post.jwt (state={})", state);
+                throw new OpenDidException(ErrorCode.OID4VP_ENCRYPTED_RESPONSE_REQUIRED);
+            }
+        });
     }
 
     /**
