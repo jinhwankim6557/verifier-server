@@ -22,6 +22,7 @@ source/did-demo-server/
 AGENTS.md
 
 # AI 작업용 문서 / 설계 초안 (로컬 전용, 원격 제거)
+source/did-verifier-server/OID4VP_JWE_APP_INTEGRATION.md
 CLAUDE.md
 PROTOCOL_ROUTING_DESIGN.md
 AI-Mockup-Guide.md
@@ -47,3 +48,4 @@ badge-sample.html
 demo-presentation.html
 verification-dashboard-mockup.html
 source/mock-wallet/index.html
+source/did-verifier-server/oid4vp-jwe-console.html

@@ -52,6 +52,7 @@ public class Oid4vpConfigService {
             // validate by parsing as OID4VPConfig
             OID4VPConfig parsedConfig = objectMapper.readValue(configJson, OID4VPConfig.class);
             validateEncryptionAlgorithm(parsedConfig);
+            validateResponseMode(configMap);
 
             Oid4vpConfig entity = oid4vpConfigRepository.findByType(CONFIG_TYPE)
                     .orElse(Oid4vpConfig.builder().type(CONFIG_TYPE).build());
@@ -82,6 +83,20 @@ public class Oid4vpConfigService {
         if (!JWEAlgorithm.ECDH_ES.getName().equals(alg) || !EncryptionMethod.A256GCM.getName().equals(enc)) {
             log.warn("Rejected OID4VP config save: unsupported encryption alg/enc (alg={}, enc={})", alg, enc);
             throw new OpenDidException(ErrorCode.OID4VP_ENCRYPTION_ALGORITHM_NOT_SUPPORTED);
+        }
+    }
+
+    /**
+     * responseMode는 OID4VPConfig(SDK)에 필드가 없어 raw configMap에서 직접 읽는다.
+     * 지금은 direct_post.jwt만 지원하므로 admin 화면도 읽기전용이지만, Oid4vpProtocolHandler가
+     * 이 값을 실제로 읽어서 initiate에 쓰기 시작했기 때문에(더 이상 하드코딩 아님) 여기서 막아두지
+     * 않으면 API를 직접 두드려 다른 값을 저장했을 때 JWE 강제가 조용히 풀려버릴 수 있다.
+     */
+    private void validateResponseMode(Map<String, Object> configMap) {
+        Object responseMode = configMap.get("responseMode");
+        if (responseMode != null && !"direct_post.jwt".equals(responseMode.toString())) {
+            log.warn("Rejected OID4VP config save: unsupported responseMode ({})", responseMode);
+            throw new OpenDidException(ErrorCode.OID4VP_RESPONSE_MODE_NOT_SUPPORTED);
         }
     }
 }

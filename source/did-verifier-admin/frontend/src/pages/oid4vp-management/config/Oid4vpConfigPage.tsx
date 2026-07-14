@@ -21,6 +21,7 @@ interface OID4VPConfigData {
   crypto: { vpTokenEncryptionKey: string | null };
   verification?: { skipX5cChainValidation?: boolean; enforceClaimConstraints?: boolean };
   encryption?: { alg: string; enc: string };
+  responseMode?: string;
 }
 
 const DEFAULT_CONFIG: OID4VPConfigData = {
@@ -40,6 +41,7 @@ const DEFAULT_CONFIG: OID4VPConfigData = {
   crypto: { vpTokenEncryptionKey: null },
   verification: { skipX5cChainValidation: false, enforceClaimConstraints: false },
   encryption: { alg: 'ECDH-ES', enc: 'A256GCM' },
+  responseMode: 'direct_post.jwt',
 };
 
 const Oid4vpConfigPage = () => {
@@ -77,6 +79,7 @@ const Oid4vpConfigPage = () => {
           verification: data.verification || { skipX5cChainValidation: false, enforceClaimConstraints: false },
           crypto: data.crypto || { vpTokenEncryptionKey: null },
           encryption: data.encryption || { alg: 'ECDH-ES', enc: 'A256GCM' },
+          responseMode: data.responseMode || 'direct_post.jwt',
         };
         setConfig(parsed);
         setOriginalConfig(parsed);
@@ -327,6 +330,18 @@ const Oid4vpConfigPage = () => {
         </Box>
 
         <SectionLabel>Encryption</SectionLabel>
+        <TextField
+          fullWidth
+          label="Response Mode"
+          value={config.responseMode || 'direct_post.jwt'}
+          variant="outlined" size="small"
+          InputProps={{ readOnly: true }}
+          sx={{ bgcolor: '#fafafa' }}
+        />
+        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, mb: 1.5, display: 'block' }}>
+          모든 OID4VP 트랜잭션은 암호화 응답(direct_post.jwt)을 요구합니다. 협상 불가 고정값이며,
+          평문(direct_post) 응답 제출은 서버가 거부합니다.
+        </Typography>
         <TextField
           fullWidth
           label="VP Token Encryption Key"

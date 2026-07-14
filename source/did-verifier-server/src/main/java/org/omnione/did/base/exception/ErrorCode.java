@@ -156,6 +156,10 @@ public enum ErrorCode {
     OID4VP_RESPONSE_DECRYPTION_FAILED("SSRVVRF01312", "Failed to decrypt OID4VP JWE response.", 400),
     OID4VP_ENCRYPTION_ALGORITHM_NOT_SUPPORTED("SSRVVRF01313",
             "OID4VP encryption alg/enc is fixed and cannot be changed to a different value.", 400),
+    OID4VP_ENCRYPTED_RESPONSE_REQUIRED("SSRVVRF01314",
+            "This session requires an encrypted (direct_post.jwt) response; plaintext submission is not accepted.", 400),
+    OID4VP_RESPONSE_MODE_NOT_SUPPORTED("SSRVVRF01315",
+            "OID4VP responseMode is fixed to direct_post.jwt and cannot be changed to a different value.", 400),
 
     // Status List Errors (1400~1499)
     STATUS_LIST_FETCH_FAILED("SSRVVRF01401", "Failed to fetch status list token.", 500),
