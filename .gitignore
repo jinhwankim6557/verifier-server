@@ -34,6 +34,7 @@ OID4VP_JWE_DESIGN.md
 OID4VP_JWE_RESPONSE_ENCRYPTION.md
 SD-JWT_서명검증_이슈_분석.md
 STATUS_LIST_INTEGRATION.md
+OID4VP_DOC_ARCHITECTURE_UPDATE_PLAN.md
 docs/superpowers/
 docs/OID4VP_ADMIN_SPEC_ANALYSIS.md
 docs/did-verifier-refactoring-design.md

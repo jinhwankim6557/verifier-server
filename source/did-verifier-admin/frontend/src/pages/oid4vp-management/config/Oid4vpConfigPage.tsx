@@ -34,6 +34,7 @@ const DEFAULT_CONFIG: OID4VPConfigData = {
   clientMetadata: {
     vpFormatsSupported: {
       'dc+sd-jwt': {},
+      'dc+sd-jwt-did': {},
       'opendid_vc': {},
       'mso_mdoc': { alg_values: ['ES256'] },
     },

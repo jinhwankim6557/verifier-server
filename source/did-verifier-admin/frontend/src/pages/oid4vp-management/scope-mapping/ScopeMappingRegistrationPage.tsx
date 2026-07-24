@@ -43,7 +43,7 @@ interface ErrorState {
   credentialId?: string;
 }
 
-const FORMATS = ['dc+sd-jwt', 'vc+sd-jwt', 'opendid_vc', 'mso_mdoc'] as const;
+const FORMATS = ['dc+sd-jwt', 'dc+sd-jwt-did', 'vc+sd-jwt', 'opendid_vc', 'mso_mdoc'] as const;
 
 const getMetaKey = (format: string) => {
   if (format === 'opendid_vc') return 'credential_schema_id_values';
@@ -54,7 +54,7 @@ const getMetaKey = (format: string) => {
 const getMetaHint = (format: string) => {
   if (format === 'opendid_vc') return 'Credential Schema ID list (use TAS Search)';
   if (format === 'mso_mdoc') return 'mDoc docType (e.g. org.iso.18013.5.1.mDL)';
-  return 'VCT values for dc+sd-jwt / vc+sd-jwt';
+  return 'VCT values for dc+sd-jwt / dc+sd-jwt-did / vc+sd-jwt';
 };
 
 const ScopeMappingRegistrationPage = () => {
