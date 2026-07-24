@@ -94,6 +94,21 @@ class CredentialStatusCheckerTest {
     }
 
     @Test
+    @DisplayName("status = RESERVED(3) 이면 STATUS_LIST_CREDENTIAL_RESERVED 예외 (fail-open 설정과 무관)")
+    void reserved_status_throws() throws Exception {
+        when(parser.parse(FAKE_SD_JWT)).thenReturn(Optional.of(new StatusListRef(0, URI)));
+        when(fetcher.fetch(URI)).thenReturn(FAKE_TOKEN_JWT);
+        when(tokenVerifier.verify(FAKE_TOKEN_JWT, URI))
+                .thenReturn(new StatusListTokenPayload(2, "lst", 3600, 9999999999L));
+        when(decoder.extract("lst", 2, 0)).thenReturn(3);
+
+        assertThatThrownBy(() -> checker.checkAll(Map.of("cred1", List.of(FAKE_SD_JWT))))
+                .isInstanceOf(OpenDidException.class)
+                .extracting(e -> ((OpenDidException) e).getErrorCode())
+                .isEqualTo(ErrorCode.STATUS_LIST_CREDENTIAL_RESERVED);
+    }
+
+    @Test
     @DisplayName("fetch 실패 + failOnFetchError=true 이면 STATUS_LIST_FETCH_FAILED 예외")
     void fetch_failure_with_fail_closed_throws() {
         when(verifierProperty.getStatusList()).thenReturn(props);
