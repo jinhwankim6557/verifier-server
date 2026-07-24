@@ -166,7 +166,8 @@ public enum ErrorCode {
     STATUS_LIST_TOKEN_INVALID("SSRVVRF01402", "Status list token validation failed.", 400),
     STATUS_LIST_CREDENTIAL_INVALID("SSRVVRF01403", "Credential has been revoked.", 400),
     STATUS_LIST_CREDENTIAL_SUSPENDED("SSRVVRF01404", "Credential is suspended.", 400),
-    STATUS_LIST_INDEX_OUT_OF_BOUNDS("SSRVVRF01405", "Status list index is out of bounds.", 400);
+    STATUS_LIST_INDEX_OUT_OF_BOUNDS("SSRVVRF01405", "Status list index is out of bounds.", 400),
+    STATUS_LIST_CREDENTIAL_RESERVED("SSRVVRF01406", "Credential status is reserved and cannot be treated as valid.", 400);
 
 
     private final String code;

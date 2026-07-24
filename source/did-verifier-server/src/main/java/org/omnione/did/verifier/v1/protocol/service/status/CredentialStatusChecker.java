@@ -69,7 +69,13 @@ public class CredentialStatusChecker {
                     log.warn("Credential SUSPENDED at idx={}, uri={}", ref.idx(), ref.uri());
                     throw new OpenDidException(ErrorCode.STATUS_LIST_CREDENTIAL_SUSPENDED);
                 }
-                case 3 -> log.debug("APPLICATION_SPECIFIC status at idx={}, skipping", ref.idx());
+                case 3 -> {
+                    // Issuer의 Status List 연동 가이드는 3을 RESERVED로 정의하며 "유효한 Credential로
+                    // 처리하지 않음"을 명시한다. IETF 초안의 "application specific" 해석과 달리 이 값은
+                    // 항상 거부 대상이다(fail-open 정책 대상 아님).
+                    log.warn("Credential RESERVED(3) at idx={}, uri={}", ref.idx(), ref.uri());
+                    throw new OpenDidException(ErrorCode.STATUS_LIST_CREDENTIAL_RESERVED);
+                }
                 default -> {
                     // IETF status list 초안은 0~3만 정의하고 나머지는 예약값이다. 예약값을 "안전하게 통과"로
                     // 처리하면(CRL/OCSP에서도 알려진 안티패턴) 향후 스펙 확장이나 손상된 값으로 폐기 상태가

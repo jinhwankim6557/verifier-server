@@ -67,6 +67,14 @@ class StatusListBitDecoderTest {
     }
 
     @Test
+    @DisplayName("idx가 음수면 예외 — 음수 shift로 인한 잘못된 VALID(0) 판정 방지")
+    void negativeIdx_throws() {
+        String lst = StatusListBitDecoder.compress(new byte[]{0x01, 0x00});
+        assertThatThrownBy(() -> decoder.extract(lst, 2, -1))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     @DisplayName("bits가 표준값(1/2/4/8)이 아니면 예외 — 바이트 경계를 넘는 잘못된 디코딩 방지")
     void nonStandardBits_throws() {
         String lst = StatusListBitDecoder.compress(new byte[]{0x00, 0x00});

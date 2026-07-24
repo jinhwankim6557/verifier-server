@@ -25,6 +25,12 @@ public class StatusListBitDecoder {
         if (!SUPPORTED_BITS.contains(bits)) {
             throw new OpenDidException(ErrorCode.STATUS_LIST_TOKEN_INVALID);
         }
+        if (idx < 0) {
+            // idx가 음수면 bitOffset도 음수가 되고, Java의 int 시프트는 시프트량을 &31로 감싸므로
+            // (예: idx=-1, bits=2 → bitOffset=-2 → 실제로는 >>30) byteIndex 상한 체크를 우회한 채
+            // 항상 0(VALID)을 반환하는 조용한 오탐이 발생한다. 배열 접근 전에 명시적으로 걸러낸다.
+            throw new IllegalArgumentException("Status list index must not be negative: " + idx);
+        }
 
         byte[] compressed = JwtPayloadUtils.decodeBase64Url(lst);
         byte[] bytes = decompress(compressed);
