@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
 import org.omnione.did.base.db.constant.ProtocolType;
 
+import java.util.List;
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -21,4 +23,8 @@ public class StatusResponse {
     private String error;
 
     private String errorDescription;
+
+    private String format;
+
+    private List<ClaimView> claims;
 }
