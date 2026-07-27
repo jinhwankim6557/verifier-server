@@ -31,6 +31,35 @@ class Oid4vpClaimExtractionServiceTest {
         assertThat(claims.get(0).getValue()).isEqualTo("");
     }
 
+    // OpenDIDVCCredentialAdapter.extractAllClaimsFromMap()가 claim을
+    // {code, caption, type, format, hideValue, value} 통짜 객체로 반환하므로,
+    // caption/value를 풀어서 꺼내는지 확인한다 (풀지 않으면 화면에 디스크립터 전체가 노출됨).
+    private static final String OPENDID_VC_CREDENTIAL =
+            "{"
+                    + "\"@context\":[\"https://www.w3.org/ns/credentials/v2\"],"
+                    + "\"type\":[\"VerifiablePresentation\"],"
+                    + "\"holder\":\"did:omn:holder\","
+                    + "\"verifiableCredential\":[{"
+                    + "\"@context\":[\"https://www.w3.org/ns/credentials/v2\"],"
+                    + "\"type\":[\"VerifiableCredential\"],"
+                    + "\"issuer\":{\"id\":\"did:omn:issuer\"},"
+                    + "\"credentialSubject\":{"
+                    + "\"id\":\"did:omn:holder\","
+                    + "\"claims\":[{\"code\":\"driver.license.issuedDate\",\"caption\":\"Issued Date\","
+                    + "\"format\":\"plain\",\"hideValue\":false,\"type\":\"text\",\"value\":\"2024-01-01\"}]"
+                    + "}"
+                    + "}]"
+                    + "}";
+
+    @Test
+    void unwrapsCaptionAndValueFromOpenDidVcClaimDescriptor() {
+        List<ClaimView> claims = service.extractFromCredential(OPENDID_VC_CREDENTIAL);
+
+        assertThat(claims).hasSize(1);
+        assertThat(claims.get(0).getCaption()).isEqualTo("Issued Date");
+        assertThat(claims.get(0).getValue()).isEqualTo("2024-01-01");
+    }
+
     @Test
     void returnsEmptyListForUnrecognizedCredentialString() {
         assertThat(service.extractFromCredential("not-a-credential")).isEmpty();

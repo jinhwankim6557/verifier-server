@@ -24,6 +24,10 @@ import java.util.Map;
 @Slf4j
 public class Oid4vpClaimExtractionService {
 
+    // OpenDIDVCCredentialAdapter.extractAllClaimsFromMap() 참고: opendid_vc 포맷은 claim이
+    // {code, caption, type, format, hideValue, value} 통짜 객체로 들어있다(다른 포맷의 평범한 값과 다름).
+    private static final String OPENDID_VC_FORMAT = "opendid_vc";
+
     private final OID4VPHelperService oid4VPHelperService;
     private final ObjectMapper objectMapper;
 
@@ -57,7 +61,7 @@ public class Oid4vpClaimExtractionService {
                         ParsedCredential parsed = adapter.parse(raw);
                         List<ClaimView> result = new ArrayList<>();
                         parsed.getAllClaims().forEach((key, value) ->
-                                result.add(new ClaimView(key, stringifyClaimValue(value))));
+                                result.add(toClaimView(parsed.getFormat(), key, value)));
                         return result;
                     } catch (DCQLException e) {
                         log.warn("Failed to parse credential for claim display: {}", e.getMessage());
@@ -68,6 +72,17 @@ public class Oid4vpClaimExtractionService {
                     log.debug("No credential adapter detected for claim display");
                     return List.of();
                 });
+    }
+
+    // opendid_vc는 value가 {caption, value, ...} 디스크립터 객체이므로 caption/value를 풀어서 꺼낸다.
+    // 그 외 포맷(dc+sd-jwt 등)은 지금까지처럼 value를 그대로 claim 값으로 사용한다.
+    private ClaimView toClaimView(String format, String key, Object value) {
+        if (OPENDID_VC_FORMAT.equals(format) && value instanceof Map<?, ?> claimMap) {
+            Object caption = claimMap.get("caption");
+            String captionStr = (caption instanceof String cs && !cs.isBlank()) ? cs : key;
+            return new ClaimView(captionStr, stringifyClaimValue(claimMap.get("value")));
+        }
+        return new ClaimView(key, stringifyClaimValue(value));
     }
 
     private String toRawString(Object credentialObj) {
