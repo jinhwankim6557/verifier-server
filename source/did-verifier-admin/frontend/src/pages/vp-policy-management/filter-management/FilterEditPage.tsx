@@ -197,10 +197,27 @@ const FilterEditPage = (props: Props) => {
         return claims;
     };
 
-    const handleChange = (field: keyof FilterFormData) => 
+    const handleChange = (field: keyof FilterFormData) =>
         (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | SelectChangeEvent<string>) => {
         const newValue = event.target.value;
         setFormData((prev) => ({ ...prev, [field]: newValue }));
+    };
+
+    const handlePresentAllChange = (event: SelectChangeEvent<string>) => {
+        const presentAll = event.target.value === 'true';
+        setFormData((prev) => ({ ...prev, presentAll }));
+    };
+
+    const handleRemoveRequiredClaim = (index: number) => {
+        const newClaims = [...formData.requiredClaims];
+        newClaims.splice(index, 1);
+        setFormData((prev) => ({ ...prev, requiredClaims: newClaims }));
+    };
+
+    const handleRemoveDisplayClaim = (index: number) => {
+        const newClaims = [...formData.displayClaims];
+        newClaims.splice(index, 1);
+        setFormData((prev) => ({ ...prev, displayClaims: newClaims }));
     };
 
     const handleReset = () => {
@@ -355,10 +372,8 @@ const FilterEditPage = (props: Props) => {
 
             try {
                 const { data } = await getFilter(numericFilterId);
-                // Force presentAll to be true regardless of the data from server
-                const modifiedData = { ...data, presentAll: true };
-                setFormData(modifiedData);
-                setInitialData(modifiedData);
+                setFormData(data);
+                setInitialData(data);
                 setIsButtonDisabled(true);
                 setIsLoading(false);
                 
@@ -550,12 +565,13 @@ const FilterEditPage = (props: Props) => {
 
                     <FormControl fullWidth margin="normal" error={!!errors.presentAll}>
                         <InputLabel>Present All</InputLabel>
-                        <Select 
-                            value="true"
+                        <Select
+                            value={formData.presentAll ? 'true' : 'false'}
                             label="Present All"
-                            disabled
+                            onChange={handlePresentAllChange}
                         >
                             <MenuItem value="true">true</MenuItem>
+                            <MenuItem value="false">false</MenuItem>
                         </Select>
                         {errors.presentAll && <FormHelperText>{errors.presentAll}</FormHelperText>}
                     </FormControl>
@@ -564,6 +580,7 @@ const FilterEditPage = (props: Props) => {
                     <Typography variant="h6" sx={{ mt: 3 }}>Required Claims</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                         Claims are automatically loaded when you select a VC schema.
+                        {!formData.presentAll && ' Remove claims to submit a subset.'}
                     </Typography>
                     {errors.errorRequiredClaimsMessage && (
                         <Typography color="error" variant="caption" sx={{ mt: 1, display: "block" }}>
@@ -575,12 +592,13 @@ const FilterEditPage = (props: Props) => {
                             <TableHead>
                                 <TableRow sx={{backgroundColor: "#f5f5f5"}}>
                                     <TableCell>Required Claim</TableCell>
+                                    {!formData.presentAll && <TableCell>Delete</TableCell>}
                                 </TableRow>
                             </TableHead>
                             <TableBody>
                                 {formData.requiredClaims.length === 0 ? (
                                     <TableRow>
-                                        <TableCell align="center">
+                                        <TableCell colSpan={formData.presentAll ? 1 : 2} align="center">
                                             <Typography variant="body2">No required claims added</Typography>
                                         </TableCell>
                                     </TableRow>
@@ -588,6 +606,13 @@ const FilterEditPage = (props: Props) => {
                                     formData.requiredClaims.map((claim, index) => (
                                         <TableRow key={index}>
                                             <TableCell>{claim}</TableCell>
+                                            {!formData.presentAll && (
+                                                <TableCell>
+                                                    <IconButton onClick={() => handleRemoveRequiredClaim(index)} sx={{ color: '#FF8400' }}>
+                                                        <DeleteIcon />
+                                                    </IconButton>
+                                                </TableCell>
+                                            )}
                                         </TableRow>
                                     ))
                                 )}
@@ -595,19 +620,20 @@ const FilterEditPage = (props: Props) => {
                         </Table>
                     </TableContainer>
 
-                    {/* Display Claims Section - Now auto-populated but can be deleted separately */}
+                    {/* Display Claims Section - auto-populated, deletable when presentAll is false */}
                     <Typography variant="h6" sx={{ mt: 3 }}>Display Claims</Typography>
                     <TableContainer component={Paper}>
                         <Table>
                             <TableHead>
                                 <TableRow sx={{backgroundColor: "#f5f5f5"}}>
                                     <TableCell>Display Claim</TableCell>
+                                    {!formData.presentAll && <TableCell>Delete</TableCell>}
                                 </TableRow>
                             </TableHead>
                             <TableBody>
                                 {formData.displayClaims.length === 0 ? (
                                     <TableRow>
-                                        <TableCell align="center">
+                                        <TableCell colSpan={formData.presentAll ? 1 : 2} align="center">
                                             <Typography variant="body2">No display claims added</Typography>
                                         </TableCell>
                                     </TableRow>
@@ -615,6 +641,13 @@ const FilterEditPage = (props: Props) => {
                                     formData.displayClaims.map((claim, index) => (
                                         <TableRow key={index}>
                                             <TableCell>{claim}</TableCell>
+                                            {!formData.presentAll && (
+                                                <TableCell>
+                                                    <IconButton onClick={() => handleRemoveDisplayClaim(index)} sx={{ color: '#FF8400' }}>
+                                                        <DeleteIcon />
+                                                    </IconButton>
+                                                </TableCell>
+                                            )}
                                         </TableRow>
                                     ))
                                 )}

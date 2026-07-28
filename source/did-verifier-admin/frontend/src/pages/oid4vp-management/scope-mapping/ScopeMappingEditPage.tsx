@@ -115,6 +115,11 @@ const ScopeMappingEditPage = () => {
   const [tasList, setTasList] = useState<{ id: string; title: string }[]>([]);
   const [tasLoading, setTasLoading] = useState(false);
 
+  // Explicit Full/Selective disclosure toggle for dc+sd-jwt-family formats.
+  // Decoupled from credQuery.claims so "Selective" with an empty claim list
+  // (before the user has added a row) doesn't silently snap back to "Full".
+  const [selectiveMode, setSelectiveMode] = useState(false);
+
   const isOpendidVc = credQuery.format === 'opendid_vc';
   const isMdoc = credQuery.format === 'mso_mdoc';
 
@@ -142,6 +147,7 @@ const ScopeMappingEditPage = () => {
         setOriginalFormData(form);
         setCredQuery(cred);
         setOriginalCredQuery(cred);
+        setSelectiveMode(cred.claims.length > 0);
       } catch (err) {
         console.error('Failed to fetch scope mapping:', err);
         await dialogs.open(CustomDialog, {
@@ -225,6 +231,15 @@ const ScopeMappingEditPage = () => {
       claims: [],
       mdocClaims: [],
     }));
+    setSelectiveMode(false);
+  };
+
+  const handleDisclosureModeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = e.target.checked;
+    setSelectiveMode(checked);
+    if (!checked) {
+      setCredQuery(prev => ({ ...prev, claims: [] }));
+    }
   };
 
   const addMdocClaim = () => {
@@ -318,6 +333,7 @@ const ScopeMappingEditPage = () => {
     if (originalFormData && originalCredQuery) {
       setFormData(originalFormData);
       setCredQuery(originalCredQuery);
+      setSelectiveMode(originalCredQuery.claims.length > 0);
       setErrors({});
     }
   };
@@ -534,41 +550,60 @@ const ScopeMappingEditPage = () => {
         )}
         {!isOpendidVc && !isMdoc && (
           <>
-            <SectionLabel>Claims (Optional)</SectionLabel>
-            <Box sx={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr 40px', gap: 1, mb: 1 }}>
-              <Typography variant="caption" color="text.secondary">ID</Typography>
-              <Typography variant="caption" color="text.secondary">Path (JSON Array)</Typography>
-              <Typography variant="caption" color="text.secondary">Values (Optional)</Typography>
-              <span />
-            </Box>
-            {credQuery.claims.map((claim, idx) => (
-              <Box key={idx} sx={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr 40px', gap: 1, mb: 1 }}>
-                <TextField
-                  size="small" placeholder="claim_id"
-                  value={claim.id}
-                  onChange={(e) => updateClaim(idx, 'id', e.target.value)}
+            <SectionLabel>Disclosure Mode</SectionLabel>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={selectiveMode}
+                  onChange={handleDisclosureModeChange}
                 />
-                <TextField
-                  size="small" placeholder='["fieldName"]'
-                  value={claim.path}
-                  onChange={(e) => updateClaim(idx, 'path', e.target.value)}
-                />
-                <TextField
-                  size="small" placeholder='["val1","val2"]'
-                  value={claim.values}
-                  onChange={(e) => updateClaim(idx, 'values', e.target.value)}
-                />
-                <IconButton size="small" color="error" onClick={() => removeClaim(idx)}>
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Box>
-            ))}
-            <Button
-              variant="outlined" size="small" startIcon={<AddIcon />}
-              onClick={addClaim} sx={{ mt: 1 }}
-            >
-              Add Claim
-            </Button>
+              }
+              label={selectiveMode ? 'Selective claims' : 'Full credential'}
+            />
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+              {selectiveMode
+                ? 'Only the claims listed below are requested from the wallet.'
+                : 'No claims are specified, so the wallet discloses the full credential.'}
+            </Typography>
+            {selectiveMode && (
+              <>
+                <SectionLabel>Claims</SectionLabel>
+                <Box sx={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr 40px', gap: 1, mb: 1 }}>
+                  <Typography variant="caption" color="text.secondary">ID</Typography>
+                  <Typography variant="caption" color="text.secondary">Path (JSON Array)</Typography>
+                  <Typography variant="caption" color="text.secondary">Values (Optional)</Typography>
+                  <span />
+                </Box>
+                {credQuery.claims.map((claim, idx) => (
+                  <Box key={idx} sx={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr 40px', gap: 1, mb: 1 }}>
+                    <TextField
+                      size="small" placeholder="claim_id"
+                      value={claim.id}
+                      onChange={(e) => updateClaim(idx, 'id', e.target.value)}
+                    />
+                    <TextField
+                      size="small" placeholder='["fieldName"]'
+                      value={claim.path}
+                      onChange={(e) => updateClaim(idx, 'path', e.target.value)}
+                    />
+                    <TextField
+                      size="small" placeholder='["val1","val2"]'
+                      value={claim.values}
+                      onChange={(e) => updateClaim(idx, 'values', e.target.value)}
+                    />
+                    <IconButton size="small" color="error" onClick={() => removeClaim(idx)}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                ))}
+                <Button
+                  variant="outlined" size="small" startIcon={<AddIcon />}
+                  onClick={addClaim} sx={{ mt: 1 }}
+                >
+                  Add Claim
+                </Button>
+              </>
+            )}
           </>
         )}
         {isOpendidVc && (
