@@ -21,6 +21,7 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Configuration properties class for the Verifier.
@@ -48,6 +49,9 @@ public class VerifierProperty {
         // 압축해제 결과 최대 크기(바이트). 100만 엔트리 status list도 bits=8 기준 125KB 수준이라
         // 1MB면 정상적인 status list는 전부 여유 있게 수용하면서 decompression bomb은 막는다.
         private long maxDecompressedBytes = 1_048_576;
+        // 사설망/loopback 호스트를 배포자가 명시적으로 신뢰할 때 등록하는 예외 목록(정확한 host 문자열 매치).
+        // 폐쇄망 배포나 로컬 개발 환경처럼 status list 호스트가 사설 IP인 게 정상인 경우에만 등록할 것.
+        private List<String> allowedPrivateHosts = new ArrayList<>();
     }
 
     private StatusListProperties statusList = new StatusListProperties();
