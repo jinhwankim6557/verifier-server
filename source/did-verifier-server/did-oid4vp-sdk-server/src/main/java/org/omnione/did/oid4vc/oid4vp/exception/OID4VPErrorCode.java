@@ -97,6 +97,8 @@ public enum OID4VPErrorCode implements OID4VPErrorCodeInterface {
     ERR_CODE_CRYPTO_ALGORITHM_NOT_AVAILABLE(ERR_CODE_CRYPTO_BASE, "005", "Cryptographic algorithm not available"),
     ERR_CODE_CRYPTO_DECODE_FAILED(ERR_CODE_CRYPTO_BASE, "006", "Failed to decode data"),
     ERR_CODE_CRYPTO_UNSUPPORTED_FORMAT(ERR_CODE_CRYPTO_BASE, "007", "Unsupported format"),
+    ERR_CODE_CRYPTO_JWE_DECRYPT_FAILED(ERR_CODE_CRYPTO_BASE, "008", "Failed to decrypt JWE response"),
+    ERR_CODE_CRYPTO_JWE_HEADER_PARSE_FAILED(ERR_CODE_CRYPTO_BASE, "009", "Failed to parse JWE header"),
 
     // DCQL (08)
     ERR_CODE_DCQL_BASE(ERR_CODE_OID4VP_BASE, "08", ""),

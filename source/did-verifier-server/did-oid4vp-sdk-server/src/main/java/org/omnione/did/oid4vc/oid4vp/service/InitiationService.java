@@ -310,7 +310,7 @@ public class InitiationService {
    * Helper method to check if response_mode requires response_uri
    */
   private boolean requiresResponseUri(String responseMode) {
-    return "direct_post".equals(responseMode);
+    return "direct_post".equals(responseMode) || "direct_post.jwt".equals(responseMode);
   }
 
   /**

@@ -49,6 +49,9 @@ public class OID4VPConfig {
     @JsonProperty("crypto")
     private Crypto crypto = new Crypto();
 
+    @JsonProperty("encryption")
+    private Encryption encryption = new Encryption();
+
     @JsonProperty("verification")
     private Verification verification = new Verification();
 
@@ -80,6 +83,28 @@ public class OID4VPConfig {
     public static class Crypto {
         @JsonProperty("vpTokenEncryptionKey")
         private String vpTokenEncryptionKey;
+    }
+
+    /**
+     * NOTE: {@code alg}/{@code enc} here are effectively fixed and display-only from this
+     * SDK's perspective. {@link org.omnione.did.oid4vc.oid4vp.util.crypto.JweResponseDecryptor#decrypt}
+     * unconditionally enforces {@code ECDH-ES} + {@code A256GCM} regardless of these config
+     * values — this is a deliberate security choice (fixed algorithm, no negotiation).
+     * The separate consuming application reads these fields to generate ephemeral keys and to
+     * advertise {@code encrypted_response_enc_values_supported} to wallets, but changing this
+     * config does NOT change what this SDK will actually accept when decrypting a
+     * {@code direct_post.jwt} response. If an operator edits {@code enc}/{@code alg} via the
+     * Admin UI to anything other than {@code ECDH-ES}/{@code A256GCM}, the consuming app would
+     * advertise a value this SDK will reject, causing a silent mismatch — keep these in sync
+     * manually.
+     */
+    @Data
+    public static class Encryption {
+        @JsonProperty("alg")
+        private String alg = "ECDH-ES";
+
+        @JsonProperty("enc")
+        private String enc = "A256GCM";
     }
 
     public String getResponseUrl() {
