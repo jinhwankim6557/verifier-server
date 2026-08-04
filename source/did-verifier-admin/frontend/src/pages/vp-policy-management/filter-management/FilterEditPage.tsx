@@ -62,7 +62,6 @@ interface ErrorState {
     allowedIssuers?: string;
     displayClaims?: string;
     presentAll?: string;
-    errorRequiredClaimsMessage?: string;
     errorAllowedIssuersMessage?: string;
     errorDisplayClaimsMessage?: string;
 }
@@ -300,10 +299,9 @@ const FilterEditPage = (props: Props) => {
         if (!formData.type.trim()) tempErrors.type = "Type is required.";                
 
         // Array validations
-        if (formData.requiredClaims.length === 0) {
-            tempErrors.errorRequiredClaimsMessage = "At least one required claim is needed.";
-        }
-
+        // requiredClaims may be empty — per spec, an unspecified/empty requiredClaims list
+        // means "no required claims", which is a valid state (e.g. presentAll=false with
+        // everything deselected).
         if (formData.allowedIssuers.length === 0) {
             tempErrors.errorAllowedIssuersMessage = "At least one allowed issuer is needed.";
         }
@@ -588,11 +586,6 @@ const FilterEditPage = (props: Props) => {
                         Claims are automatically loaded when you select a VC schema.
                         {!formData.presentAll && ' Remove claims to submit a subset.'}
                     </Typography>
-                    {errors.errorRequiredClaimsMessage && (
-                        <Typography color="error" variant="caption" sx={{ mt: 1, display: "block" }}>
-                            {errors.errorRequiredClaimsMessage}
-                        </Typography>
-                    )}
                     <TableContainer component={Paper}>
                         <Table>
                             <TableHead>
