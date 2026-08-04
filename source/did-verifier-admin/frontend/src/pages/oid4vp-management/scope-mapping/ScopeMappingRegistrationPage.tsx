@@ -7,7 +7,8 @@ import AddIcon from '@mui/icons-material/Add';
 import { useDialogs } from '@toolpad/core';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { postScopeMapping, fetchTasCredentialSchemas } from '../../../apis/oid4vp-api';
+import { postScopeMapping } from '../../../apis/oid4vp-api';
+import { getVcSchemes } from '../../../apis/vp-filter-api';
 import CustomDialog from '../../../components/dialog/CustomDialog';
 import SearchDialog from '../../../components/dialog/SearchDialog';
 import FullscreenLoader from '../../../components/loading/FullscreenLoader';
@@ -43,6 +44,32 @@ interface ErrorState {
   credentialId?: string;
 }
 
+// TAS VC schema shapes (same as FilterEditPage's getVcSchemes()/extractClaimsFromSchema —
+// reused here instead of the separate /list/admin/v1/credential-schemas/all endpoint since
+// that one's response shape isn't verified against a live TAS).
+interface TasClaimItem {
+  id: string;
+}
+
+interface TasNamespace {
+  id: string;
+}
+
+interface TasClaim {
+  items: TasClaimItem[];
+  namespace: TasNamespace;
+}
+
+interface VcSchema {
+  schemaId: string;
+  title: string;
+  vcSchema: {
+    credentialSubject: {
+      claims: TasClaim[];
+    };
+  };
+}
+
 const FORMATS = ['dc+sd-jwt', 'dc+sd-jwt-did', 'vc+sd-jwt', 'opendid_vc', 'mso_mdoc'] as const;
 
 const getMetaKey = (format: string) => {
@@ -52,7 +79,7 @@ const getMetaKey = (format: string) => {
 };
 
 const getMetaHint = (format: string) => {
-  if (format === 'opendid_vc') return 'Credential Schema ID list (use TAS Search)';
+  if (format === 'opendid_vc') return 'Credential Schema ID list (use Schema Search)';
   if (format === 'mso_mdoc') return 'mDoc docType (e.g. org.iso.18013.5.1.mDL)';
   return 'VCT values for dc+sd-jwt / dc+sd-jwt-did / vc+sd-jwt';
 };
@@ -78,7 +105,7 @@ const ScopeMappingRegistrationPage = () => {
   });
 
   const [tasSearchOpen, setTasSearchOpen] = useState(false);
-  const [tasList, setTasList] = useState<{ id: string; title: string }[]>([]);
+  const [tasList, setTasList] = useState<{ id: string; title: string; vcSchema?: VcSchema['vcSchema'] }[]>([]);
   const [tasLoading, setTasLoading] = useState(false);
 
   // Explicit Full/Selective disclosure toggle for dc+sd-jwt-family formats.
@@ -116,15 +143,24 @@ const ScopeMappingRegistrationPage = () => {
           claim_name: c.claimName.trim(),
         }));
       if (claims.length > 0) cred.claims = claims;
-    } else if (!isOpendidVc && !isMdoc && credQuery.claims.length > 0) {
+    } else if (!isMdoc && credQuery.claims.length > 0) {
       const claims: any[] = [];
       credQuery.claims.forEach(c => {
         if (!c.path.trim()) return;
         const claim: any = {};
         if (c.id) claim.id = c.id;
-        try { claim.path = JSON.parse(c.path); } catch { claim.path = [c.path]; }
+        // path/values must always be arrays per DCQL — JSON.parse("1") succeeds and
+        // returns the number 1, not an array, so a bare non-array result must still
+        // fall back to wrapping the raw input in an array.
+        try {
+          const parsed = JSON.parse(c.path);
+          claim.path = Array.isArray(parsed) ? parsed : [c.path];
+        } catch { claim.path = [c.path]; }
         if (c.values.trim()) {
-          try { claim.values = JSON.parse(c.values); } catch { claim.values = [c.values]; }
+          try {
+            const parsed = JSON.parse(c.values);
+            claim.values = Array.isArray(parsed) ? parsed : [c.values];
+          } catch { claim.values = [c.values]; }
         }
         claims.push(claim);
       });
@@ -204,37 +240,72 @@ const ScopeMappingRegistrationPage = () => {
     }));
   };
 
+  // Extracts full claim codes ("namespace.itemId") from a TAS VC schema — same shape and
+  // logic as FilterEditPage's extractClaimsFromSchema.
+  const extractClaimsFromCredentialSchema = (schema: VcSchema['vcSchema'] | undefined): string[] => {
+    if (!schema) return [];
+    const claims: string[] = [];
+    try {
+      schema.credentialSubject.claims.forEach((claim) => {
+        claim.items.forEach((item) => {
+          claims.push(`${claim.namespace.id}.${item.id}`);
+        });
+      });
+    } catch (error) {
+      console.error('Error extracting claims from TAS VC schema:', error);
+    }
+    return claims;
+  };
+
   const handleTasSearch = async () => {
     setTasSearchOpen(true);
     try {
       setTasLoading(true);
-      const response = await fetchTasCredentialSchemas();
-      const items = Array.isArray(response?.data) ? response.data : [];
-      setTasList(items.map((item: any) => ({
-        id: item.schemaId || item.id || '',
-        title: item.name || item.schemaId || '',
+      const response = await getVcSchemes();
+      const schemas: VcSchema[] = response?.data?.vcSchemaList || [];
+      setTasList(schemas.map((schema) => ({
+        id: schema.schemaId,
+        title: schema.title || schema.schemaId,
+        vcSchema: schema.vcSchema,
       })));
-    } catch {
-      setTasList([
-        { id: 'org.opendid.v1.national-id', title: 'National ID' },
-        { id: 'org.opendid.v1.driver-license', title: 'Driver License' },
-        { id: 'org.opendid.v1.employee-cert', title: 'Employee Certificate' },
-      ]);
+    } catch (err) {
+      setTasList([]);
+      setTasSearchOpen(false);
+      await dialogs.open(CustomDialog, {
+        title: 'Error',
+        message: `Failed to load credential schemas from TAS: ${err}`,
+        isModal: true,
+      });
     } finally {
       setTasLoading(false);
     }
   };
 
+  // Selecting a schema fully replaces metaValues/claims rather than appending — one
+  // schema selection determines exactly one consistent (schema id, claim set) pair.
   const handleTasSelect = (selected: any) => {
     const schemaId = selected.id || selected.title;
-    setCredQuery(prev => {
-      let arr: string[] = [];
-      if (prev.metaValues.trim()) {
-        try { arr = JSON.parse(prev.metaValues); } catch { arr = []; }
-      }
-      if (!arr.includes(schemaId)) arr.push(schemaId);
-      return { ...prev, metaValues: JSON.stringify(arr) };
-    });
+    const extractedCodes = extractClaimsFromCredentialSchema(selected.vcSchema);
+    const newClaims: ClaimEntry[] = extractedCodes.map(code => ({
+      id: '', path: JSON.stringify([code]), values: '',
+    }));
+
+    setCredQuery(prev => ({
+      ...prev,
+      metaValues: JSON.stringify([schemaId]),
+      claims: newClaims,
+    }));
+    setSelectiveMode(true);
+  };
+
+  // Displays an opendid_vc claim's full code without the JSON array wrapper (["code"] -> code).
+  const displayOpendidVcClaimCode = (path: string): string => {
+    try {
+      const parsed = JSON.parse(path);
+      return Array.isArray(parsed) && parsed.length > 0 ? String(parsed[0]) : path;
+    } catch {
+      return path;
+    }
   };
 
   const validate = () => {
@@ -421,12 +492,14 @@ const ScopeMappingRegistrationPage = () => {
               variant="outlined" size="small"
               onChange={(e) => setCredQuery(prev => ({ ...prev, metaValues: e.target.value }))}
               placeholder='["value1", "value2"]'
-              helperText="JSON array format"
+              helperText={isOpendidVc ? 'Set via Schema Search' : 'JSON array format'}
+              InputProps={{ readOnly: isOpendidVc }}
+              sx={isOpendidVc ? { bgcolor: '#fafafa' } : undefined}
             />
             {isOpendidVc && (
               <Button variant="contained" size="small" sx={{ minWidth: 110, height: 40 }}
                 onClick={handleTasSearch}>
-                TAS Search
+                Schema Search
               </Button>
             )}
           </Box>
@@ -472,7 +545,7 @@ const ScopeMappingRegistrationPage = () => {
             </Button>
           </>
         )}
-        {!isOpendidVc && !isMdoc && (
+        {!isMdoc && (
           <>
             <SectionLabel>Disclosure Mode</SectionLabel>
             <FormControlLabel
@@ -489,7 +562,35 @@ const ScopeMappingRegistrationPage = () => {
                 ? 'Only the claims listed below are requested from the wallet.'
                 : 'No claims are specified, so the wallet discloses the full credential.'}
             </Typography>
-            {selectiveMode && (
+            {selectiveMode && isOpendidVc && (
+              <>
+                <SectionLabel>Claims</SectionLabel>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                  Claims are populated by selecting a schema via Schema Search above — manual entry isn't
+                  supported for opendid_vc. Remove individual claims with the delete button if needed.
+                </Typography>
+                {credQuery.claims.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    No claims yet — use Schema Search to populate.
+                  </Typography>
+                ) : (
+                  credQuery.claims.map((claim, idx) => (
+                    <Box key={idx} sx={{ display: 'grid', gridTemplateColumns: '1fr 40px', gap: 1, mb: 1 }}>
+                      <TextField
+                        size="small"
+                        value={displayOpendidVcClaimCode(claim.path)}
+                        InputProps={{ readOnly: true }}
+                        sx={{ bgcolor: '#fafafa' }}
+                      />
+                      <IconButton size="small" color="error" onClick={() => removeClaim(idx)}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  ))
+                )}
+              </>
+            )}
+            {selectiveMode && !isOpendidVc && (
               <>
                 <SectionLabel>Claims</SectionLabel>
                 <Box sx={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr 40px', gap: 1, mb: 1 }}>
@@ -529,13 +630,6 @@ const ScopeMappingRegistrationPage = () => {
               </>
             )}
           </>
-        )}
-        {isOpendidVc && (
-          <Box sx={{ mt: 2, p: 1.5, bgcolor: '#fff3e0', borderRadius: 1, border: '1px solid #ffe0b2' }}>
-            <Typography variant="body2" color="text.secondary">
-              opendid_vc format submits the full credential. Individual claims are not specified.
-            </Typography>
-          </Box>
         )}
 
         {/* JSON Preview */}

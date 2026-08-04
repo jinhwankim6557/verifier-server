@@ -59,7 +59,10 @@ const Oid4vpPolicyDetailPage = () => {
       }
     };
     fetchData();
-  }, [policyId, dialogs, navigate]);
+    // dialogs omitted: useDialogs() returns a new ref on every dialog open/close app-wide,
+    // so keeping it here would re-trigger this effect each time dialogs.open() fires on error.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [policyId, navigate]);
 
   const handleEdit = () => {
     if (policyData) {

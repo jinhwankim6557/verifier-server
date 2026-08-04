@@ -247,7 +247,10 @@ const ProcessEditPage = (props: Props) => {
       };
 
       fetchData();
-    }, [processId, dialogs, navigate]);
+      // dialogs omitted: useDialogs() returns a new ref on every dialog open/close app-wide,
+      // which would otherwise re-trigger this effect whenever any dialog opens elsewhere.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [processId, navigate]);
 
     useEffect(() => {
       if (!initialData) return;

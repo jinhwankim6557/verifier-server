@@ -387,7 +387,13 @@ const FilterEditPage = (props: Props) => {
         };
 
         fetchData();
-    }, [numericFilterId, dialogs, navigate]);
+        // dialogs omitted: @toolpad/core's useDialogs() returns a new object identity whenever
+        // ANY dialog opens/closes anywhere in the app (its internal closeDialog callback depends
+        // on the dialog stack state). Keeping dialogs here re-triggers this effect every time
+        // fetchVcSchemas() shows an error dialog (e.g. TAS unreachable) — an infinite
+        // fetch → error dialog → refetch loop that stacks dialog backdrops (screen goes dark).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [numericFilterId, navigate]);
 
     useEffect(() => {
         if (!initialData) return;

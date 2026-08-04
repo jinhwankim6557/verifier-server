@@ -107,7 +107,12 @@ const ProcessDetailPage = (props: Props) => {
         };
 
         fetchData();
-    }, [processId, dialogs, navigate]);
+        // dialogs is intentionally omitted: @toolpad/core's useDialogs() returns a new
+        // object identity whenever ANY dialog opens/closes anywhere in the app, so keeping
+        // it here re-triggers this effect every time dialogs.open() is called on error —
+        // an infinite fetch/error-dialog loop.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [processId, navigate]);
 
     const StyledContainer = useMemo(() => styled(Box)(({ theme }) => ({
         width: 500,

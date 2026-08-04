@@ -72,7 +72,3 @@ export const deleteOid4vpPolicy = async (id: number) => {
     return deleteData(API_BASE_URL, `policies/${id}`);
 };
 
-// TAS Credential Schema lookup (for opendid_vc format)
-export const fetchTasCredentialSchemas = async () => {
-    return getData(API_BASE_URL, "oid4vp/tas/credential-schemas");
-};

@@ -154,7 +154,10 @@ const ProfileRegistration = (props: Props) => {
       };
       
       loadVerifierData();
-    }, [dialogs]); 
+      // dialogs omitted: useDialogs() returns a new ref on every dialog open/close app-wide,
+      // so keeping it here would re-trigger this effect each time dialogs.open() fires on error.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     
     useEffect(() => {
         const isModified = 
@@ -227,7 +230,10 @@ const ProfileRegistration = (props: Props) => {
       };
       
       loadInitialData();
-    }, [dialogs]);
+      // dialogs omitted: useDialogs() returns a new ref on every dialog open/close app-wide,
+      // so keeping it here would re-trigger this effect each time dialogs.open() fires on error.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     
     // Process 검색 함수
     const handleProcessSearch = async (searchTerm?: string) => {
