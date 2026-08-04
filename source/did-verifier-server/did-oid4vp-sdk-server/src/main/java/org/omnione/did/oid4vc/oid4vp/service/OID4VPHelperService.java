@@ -555,18 +555,35 @@ public class OID4VPHelperService {
 
           // Format validation against DCQL query
           if (expectedCredential != null) {
-            if (!verifier.getFormat().equals(expectedCredential.getFormat())) {
-              throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_FORMAT_MISMATCH,
-                  "Credential '" + credentialType + "' - Expected format: " + expectedCredential.getFormat() +
-                      ", Actual: " + verifier.getFormat());
+            // VPTokenVerifier.getFormat() returns a fixed constant per verifier instance (e.g.
+            // SDJWTVPVerifier always reports "dc+sd-jwt"), so it can't distinguish credential
+            // sub-variants like dc+sd-jwt-did. Prefer the DCQL CredentialAdapter's content-derived
+            // format (it reads the credential's own JWT typ header) for this comparison, falling
+            // back to verifier.getFormat() only if adapter-based parsing isn't available.
+            String actualFormat = verifier.getFormat();
+            ParsedCredential parsedCredential = null;
+            try {
+              parsedCredential = DCQLCredentialMatcher.parseCredential(
+                  credential, expectedCredential.getFormat());
+              actualFormat = parsedCredential.getFormat();
+            } catch (DCQLException e) {
+              log.debug("DCQL adapter parse failed for format check, falling back to verifier.getFormat(): {}",
+                  e.getMessage());
             }
 
-            // Meta condition validation
-            ParsedCredential parsedCredential = null;
+            if (!actualFormat.equals(expectedCredential.getFormat())) {
+              throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_FORMAT_MISMATCH,
+                  "Credential '" + credentialType + "' - Expected format: " + expectedCredential.getFormat() +
+                      ", Actual: " + actualFormat);
+            }
+
+            // Meta condition validation (reuse the credential parsed above when available)
             if (expectedCredential.getMeta() != null && !expectedCredential.getMeta().isEmpty()) {
               try {
-                parsedCredential = DCQLCredentialMatcher.parseCredential(
-                    credential, expectedCredential.getFormat());
+                if (parsedCredential == null) {
+                  parsedCredential = DCQLCredentialMatcher.parseCredential(
+                      credential, expectedCredential.getFormat());
+                }
 
                 if (!DCQLCredentialMatcher.matchesMetadata(parsedCredential, expectedCredential.getMeta())) {
                   throw new OID4VPException(OID4VPErrorCode.ERR_CODE_VP_META_MISMATCH,

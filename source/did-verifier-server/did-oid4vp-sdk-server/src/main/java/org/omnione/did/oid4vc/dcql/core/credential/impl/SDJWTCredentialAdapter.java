@@ -16,6 +16,7 @@
 
 package org.omnione.did.oid4vc.dcql.core.credential.impl;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -33,12 +34,12 @@ import org.omnione.did.sdjwt.util.SimpleJWTDecoder;
 
 /**
  * CredentialAdapter implementation for SD-JWT (Selective Disclosure JWT) credentials.
- * Supports formats: vc+sd-jwt, dc+sd-jwt
+ * Supports formats: vc+sd-jwt, dc+sd-jwt, dc+sd-jwt-did
  */
 @Slf4j
 public class SDJWTCredentialAdapter implements CredentialAdapter {
 
-    private static final Set<String> SUPPORTED_FORMATS = Set.of("vc+sd-jwt", "dc+sd-jwt");
+    private static final Set<String> SUPPORTED_FORMATS = Set.of("vc+sd-jwt", "dc+sd-jwt", "dc+sd-jwt-did");
 
     private static final Set<String> RESERVED_CLAIMS = Set.of(
         "iss", "sub", "aud", "exp", "nbf", "iat", "jti",
@@ -64,6 +65,7 @@ public class SDJWTCredentialAdapter implements CredentialAdapter {
         try {
             SDJWT sdjwt = SDJWT.parse(rawCredential);
             SimpleJWTDecoder.SimpleJWT jwt = SimpleJWTDecoder.parse(sdjwt.getCredentialJwt());
+            JsonNode header = jwt.getHeader();
             Map<String, Object> payload = jwt.getPayloadAsMap();
 
             // Extract base claims (excluding reserved)
@@ -79,7 +81,7 @@ public class SDJWTCredentialAdapter implements CredentialAdapter {
             Map<String, Object> metadata = extractMetadata(payload);
 
             // Determine format from vct or default
-            String format = determineFormat(payload);
+            String format = determineFormat(header, payload);
 
             return ParsedCredential.builder()
                 .format(format)
@@ -273,8 +275,19 @@ public class SDJWTCredentialAdapter implements CredentialAdapter {
         return metadata;
     }
 
-    private String determineFormat(Map<String, Object> payload) {
-        // If vct is present, it's likely a VC SD-JWT
+    private String determineFormat(JsonNode header, Map<String, Object> payload) {
+        // The credential's own JWT header 'typ' is authoritative when present — it's what the
+        // Issuer actually stamped (e.g. "dc+sd-jwt-did"), and is more reliable than inferring
+        // from payload shape (an earlier version of this method guessed DID-binding from
+        // cnf.kid vs cnf.jwk, but real OpenDID dc+sd-jwt-did credentials still use cnf.jwk —
+        // the distinguishing signal is typ, not cnf).
+        if (header != null && header.has("typ")) {
+            String typ = header.get("typ").asText();
+            if ("dc+sd-jwt-did".equals(typ) || "dc+sd-jwt".equals(typ) || "vc+sd-jwt".equals(typ)) {
+                return typ;
+            }
+        }
+        // No recognized typ — fall back to the vct-presence heuristic.
         if (payload.containsKey("vct")) {
             return "dc+sd-jwt";
         }
