@@ -49,13 +49,7 @@ public class FilterService {
                 .displayClaims(filterDTO.getDisplayClaims())
                 .present_all(filterDTO.isPresentAll())
                 .build();
-        try {
-            String serializeToFilter = JsonUtil.serializeToJson(filterDTO);
-            String value = BaseMultibaseUtil.encode(serializeToFilter.getBytes(StandardCharsets.UTF_8));
-            vpFilter.setValue(value);
-        } catch (CommonSdkException e) {
-            throw new OpenDidException(ErrorCode.JSON_PARSE_ERROR);
-        }
+        vpFilter.setValue(encodeFilterValue(filterDTO));
 
         vpFilterRepository.save(vpFilter);
     }
@@ -72,11 +66,34 @@ public class FilterService {
         existingFilter.setRequiredClaims(reqFilterDto.getRequiredClaims());
         existingFilter.setAllowedIssuers(reqFilterDto.getAllowedIssuers());
         existingFilter.setDisplayClaims(reqFilterDto.getDisplayClaims());
-        existingFilter.setValue(reqFilterDto.getValue());
+        existingFilter.setValue(encodeFilterValue(reqFilterDto));
         existingFilter.setPresent_all(reqFilterDto.isPresentAll());
 
 
         return FilterDTO.fromVpFilter(vpFilterRepository.save(existingFilter));
+    }
+
+    /**
+     * filterId/value/createdAt을 제외한 순수 필터 정의 필드만 직렬화해 value에 저장할
+     * multibase 스냅샷을 만든다. 이 필드들을 포함하면 이전 값(value)이 자기참조로 중첩되거나
+     * 저장 시점마다 shape가 달라질 수 있어 saveFilter/updateFilter 양쪽에서 동일하게 제외한다.
+     */
+    private String encodeFilterValue(FilterDTO filterDTO) {
+        FilterDTO snapshot = FilterDTO.builder()
+                .title(filterDTO.getTitle())
+                .id(filterDTO.getId())
+                .type(filterDTO.getType())
+                .requiredClaims(filterDTO.getRequiredClaims())
+                .allowedIssuers(filterDTO.getAllowedIssuers())
+                .displayClaims(filterDTO.getDisplayClaims())
+                .presentAll(filterDTO.isPresentAll())
+                .build();
+        try {
+            String serializeToFilter = JsonUtil.serializeToJson(snapshot);
+            return BaseMultibaseUtil.encode(serializeToFilter.getBytes(StandardCharsets.UTF_8));
+        } catch (CommonSdkException e) {
+            throw new OpenDidException(ErrorCode.JSON_PARSE_ERROR);
+        }
     }
 
     public FilterDTO getFilterInfo(long filterId) {
