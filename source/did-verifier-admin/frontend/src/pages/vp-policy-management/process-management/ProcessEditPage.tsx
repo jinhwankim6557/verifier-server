@@ -441,7 +441,7 @@ const ProcessEditPage = (props: Props) => {
                     size="small"
                     value={newEndpoint}
                     onChange={(e) => setNewEndpoint(e.target.value)}
-                    placeholder="Enter endpoint" 
+                    placeholder="Enter Endpoint URL (ex: http://127.0.0.1:8092/verifier/api/v1)"
                     error={!!errors.endpoints}
                 />
                 <Button 

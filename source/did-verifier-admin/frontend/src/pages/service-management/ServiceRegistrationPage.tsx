@@ -361,7 +361,7 @@ const ServiceRegistrationPage = (props: Props) => {
                                 {formData.endpoints.map((endpoint, index) => (
                                     <TableRow key={index}>
                                         <TableCell sx={{ verticalAlign: 'top', width: '80%' }}>
-                                            <TextField fullWidth size="small" value={endpoint} onChange={(event) => handleEndpointChange(index, event)} error={!!errors.endpoints?.[index]} helperText={errors.endpoints?.[index]} />
+                                            <TextField fullWidth size="small" value={endpoint} onChange={(event) => handleEndpointChange(index, event)} error={!!errors.endpoints?.[index]} helperText={errors.endpoints?.[index]} placeholder="ex: http://127.0.0.1:8092/verifier/api/v1" />
                                         </TableCell>
                                         <TableCell sx={{ verticalAlign: 'top', width: '20%', textAlign: 'center' }}>
                                             <IconButton onClick={() => handleRemoveEndpoint(index)} sx={{ color: '#FF8400' }}>

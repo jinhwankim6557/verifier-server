@@ -614,7 +614,7 @@ const FilterRegistrationPage = (props: Props) => {
                             size="small"
                             value={newAllowedIssuer}
                             onChange={(e) => setNewAllowedIssuer(e.target.value)}
-                            placeholder="Enter issuer" 
+                            placeholder="Enter Issuer DID (ex: did:omn:issuer)"
                         />
                         <Button 
                             variant="contained" 
