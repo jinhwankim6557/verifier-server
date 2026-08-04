@@ -484,7 +484,7 @@ public class AuthorizationService {
    * Checks if response_mode requires response_uri
    */
   private boolean requiresResponseUri(String responseMode) {
-    return List.of("direct_post", "dc_api").contains(responseMode);
+    return List.of("direct_post", "direct_post.jwt", "dc_api").contains(responseMode);
   }
 
   /**

@@ -48,7 +48,11 @@ public class StatusListTokenFetcher {
         } catch (IllegalArgumentException e) {
             throw new OpenDidException(ErrorCode.STATUS_LIST_FETCH_FAILED);
         }
-        if (!"https".equalsIgnoreCase(parsed.getScheme())) {
+        String scheme = parsed.getScheme();
+        // https 강제는 SSRF 방어에 기여하지 않는다(목적지가 아니라 프로토콜만 바뀔 뿐). 표준(draft-ietf-oauth-status-list)도
+        // Status List Token 자체의 서명이 무결성을 보장하므로 전송 계층에 기대지 않는다고 명시한다. 다만 file/gopher 등
+        // 비HTTP 스킴을 통한 SSRF 변형은 여전히 막는다.
+        if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
             throw new OpenDidException(ErrorCode.STATUS_LIST_FETCH_FAILED);
         }
         validateNotPrivateNetwork(parsed);
@@ -96,12 +100,19 @@ public class StatusListTokenFetcher {
         if (host == null) {
             throw new OpenDidException(ErrorCode.STATUS_LIST_FETCH_FAILED);
         }
+        if (props.getAllowedPrivateHosts().contains(host)) {
+            log.debug("Host {} is explicitly allow-listed, skipping private-network check", host);
+            return;
+        }
         try {
             for (InetAddress address : InetAddress.getAllByName(host)) {
                 if (address.isLoopbackAddress() || address.isSiteLocalAddress()
                         || address.isLinkLocalAddress() || address.isAnyLocalAddress()
                         || address.isMulticastAddress()) {
-                    log.warn("Rejected status list uri resolving to a non-public address: {} -> {}", host, address);
+                    log.warn("Rejected status list uri resolving to a non-public address: {} -> {}. "
+                                    + "If this is expected for your deployment (e.g. local/private network), "
+                                    + "add \"{}\" to verifier.status-list.allowed-private-hosts in application-verifier.yml.",
+                            host, address, host);
                     throw new OpenDidException(ErrorCode.STATUS_LIST_FETCH_FAILED);
                 }
             }

@@ -31,6 +31,11 @@ verifier:
     max-cache-ttl-seconds: 86400
     # Status List Token의 ttl claim 하한 (초)
     min-cache-ttl-seconds: 60
+    # SSRF 방지 차원에서 status_list.uri가 사설망/loopback으로 resolve되면 기본적으로 차단한다.
+    # 로컬 개발망이나 폐쇄망 배포처럼 status list 호스트가 사설 IP인 게 정상인 경우에만
+    # 아래에 정확한 host 문자열을 등록해 예외 처리한다.
+    allowed-private-hosts:
+      - "192.168.3.110"
 
 # mdoc X.509 Trust Anchor 설정
 # MdocTrustAnchorLoader가 사용합니다

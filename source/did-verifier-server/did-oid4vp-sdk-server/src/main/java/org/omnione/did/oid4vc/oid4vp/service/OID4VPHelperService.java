@@ -61,6 +61,7 @@ public class OID4VPHelperService {
   public static final String RESPONSE_MODE_DIRECT_POST = "direct_post";
   public static final String RESPONSE_MODE_FRAGMENT = "fragment";
   public static final String RESPONSE_MODE_DC_API = "dc_api";
+  public static final String RESPONSE_MODE_DIRECT_POST_JWT = "direct_post.jwt";
 
   public static final String PARAM_STATE = "state";
   public static final String PARAM_ERROR = "error";
@@ -99,7 +100,8 @@ public class OID4VPHelperService {
   }
 
   public static boolean requiresResponseUri(String responseMode) {
-    return RESPONSE_MODE_DIRECT_POST.equals(responseMode);
+    return RESPONSE_MODE_DIRECT_POST.equals(responseMode)
+            || RESPONSE_MODE_DIRECT_POST_JWT.equals(responseMode);
   }
 
   /**
@@ -764,6 +766,7 @@ public class OID4VPHelperService {
       log.info("Session status updated to COMPLETED for state: {}", session.getState());
 
       if ((RESPONSE_MODE_DIRECT_POST.equals(session.getResponseMode())
+          || RESPONSE_MODE_DIRECT_POST_JWT.equals(session.getResponseMode())
           || RESPONSE_MODE_FRAGMENT.equals(session.getResponseMode()))
           && session.getClientMetadata() != null) {
         Map<String, Object> metadata = null;
