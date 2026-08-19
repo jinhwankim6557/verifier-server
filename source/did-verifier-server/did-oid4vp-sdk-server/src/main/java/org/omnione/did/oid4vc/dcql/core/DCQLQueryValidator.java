@@ -32,7 +32,7 @@ public class DCQLQueryValidator {
       "aki", "etsi_tl", "openid_federation", "x509_san_dns", "x509_san_uri"
   );
 
-  private static final Set<String> MDOC_FORMATS = Set.of("mso_mdoc");
+  private static final Set<String> MDOC_FORMATS = Set.of("mso_mdoc", "mso_mdoc-did");
 
   public static ValidationResult validate(DCQLQuery dcqlQuery) {
     ValidationResult result = new ValidationResult();
@@ -378,7 +378,7 @@ public class DCQLQueryValidator {
     Set<String> supportedFormats = CredentialAdapterRegistry.getInstance().getAllSupportedFormats();
 
     Set<String> knownFormats = new HashSet<>(supportedFormats);
-    knownFormats.addAll(Set.of("jwt_vc_json", "jwt_vc", "ldp_vc", "mso_mdoc"));
+    knownFormats.addAll(Set.of("jwt_vc_json", "jwt_vc", "ldp_vc", "mso_mdoc", "mso_mdoc-did"));
 
     if (!knownFormats.contains(format)) {
       result.addWarning(context + ".format '" + format + "' may not be supported");

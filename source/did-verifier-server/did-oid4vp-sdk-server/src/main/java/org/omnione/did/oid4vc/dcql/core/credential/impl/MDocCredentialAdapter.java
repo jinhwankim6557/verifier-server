@@ -34,12 +34,18 @@ import org.omnione.did.oid4vc.dcql.exception.DCQLException;
 
 /**
  * CredentialAdapter implementation for mDoc (ISO 18013-5) credentials.
- * Supports format: mso_mdoc
+ *
+ * <p>Supports formats: mso_mdoc (x5chain-based issuer identification) and mso_mdoc-did
+ * (DID-native, issuer identified by the kid in the IssuerAuth unprotected header).
+ * As with SD-JWT, the credential's own content decides which one it is.
  */
 @Slf4j
 public class MDocCredentialAdapter implements CredentialAdapter {
 
-    private static final Set<String> SUPPORTED_FORMATS = Set.of("mso_mdoc");
+    private static final String FORMAT_MDOC = "mso_mdoc";
+    private static final String FORMAT_MDOC_DID = "mso_mdoc-did";
+
+    private static final Set<String> SUPPORTED_FORMATS = Set.of(FORMAT_MDOC, FORMAT_MDOC_DID);
 
     private static final Set<String> RESERVED_CLAIMS = Set.of(
         "docType", "version", "status", "validityInfo", "deviceKeyInfo"
@@ -98,7 +104,7 @@ public class MDocCredentialAdapter implements CredentialAdapter {
             }
 
             return ParsedCredential.builder()
-                .format("mso_mdoc")
+                .format(resolveFormat(rawCredential))
                 .rawCredential(rawCredential)
                 .baseClaims(baseClaims)
                 .allClaims(allClaims)
@@ -112,6 +118,20 @@ public class MDocCredentialAdapter implements CredentialAdapter {
             throw new DCQLException("Failed to parse mDoc credential: " + e.getMessage(), e);
         } catch (Exception e) {
             throw new DCQLException("Failed to parse mDoc credential: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Resolves the concrete format from the credential itself: an IssuerAuth carrying a kid
+     * (COSE label 4) is DID-native, otherwise the issuer is identified by the x5chain.
+     */
+    private String resolveFormat(String rawCredential) {
+        try {
+            String kid = MDocParser.extractIssuerKid(rawCredential);
+            return kid != null && !kid.isBlank() ? FORMAT_MDOC_DID : FORMAT_MDOC;
+        } catch (Exception e) {
+            log.debug("Failed to read issuer kid, treating credential as {}: {}", FORMAT_MDOC, e.getMessage());
+            return FORMAT_MDOC;
         }
     }
 
