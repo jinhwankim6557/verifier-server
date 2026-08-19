@@ -18,6 +18,8 @@ import org.omnione.did.base.exception.OpenDidException;
 import org.omnione.did.base.util.BaseCoreDidUtil;
 import org.omnione.did.data.model.did.DidDocument;
 import org.omnione.did.data.model.did.VerificationMethod;
+import org.omnione.did.oid4vc.formatter.oid4vp.verifier.dto.IdentifierResult;
+import org.omnione.did.oid4vc.formatter.oid4vp.verifier.impl.MDocVPVerifier;
 import org.omnione.did.oid4vc.oid4vp.dto.ServiceResult;
 import org.omnione.did.oid4vc.oid4vp.exception.OID4VPException;
 import org.omnione.did.oid4vc.oid4vp.service.AuthorizationService;
@@ -26,7 +28,6 @@ import org.omnione.did.oid4vc.oid4vp.util.crypto.JweResponseDecryptor;
 import org.omnione.did.oid4vc.oid4vp.util.crypto.MultibaseUtils;
 import org.omnione.did.oid4vc.oid4vp.util.jar.jws.CompactSigner;
 
-import java.security.PrivateKey;
 import java.security.interfaces.ECPrivateKey;
 import org.omnione.did.verifier.v1.admin.service.VerifierInfoQueryService;
 import org.omnione.did.verifier.v1.agent.service.DidDocService;
@@ -36,12 +37,10 @@ import org.omnione.did.verifier.v1.common.service.VpSubmitAuditService;
 import org.omnione.did.verifier.v1.protocol.service.status.CredentialStatusChecker;
 import org.omnione.did.verifier.v1.protocol.api.dto.Oid4vpResponseRequest;
 import org.omnione.did.verifier.v1.protocol.api.dto.Oid4vpResponseResult;
-import org.omnione.did.verifier.v1.protocol.security.MdocTrustAnchorLoader;
 import org.omnione.did.verifier.v1.protocol.security.Oid4vpEncKeyManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.Base64;
 
@@ -52,7 +51,6 @@ public class OID4VPService {
 
     private final AuthorizationService authorizationService;
     private final OID4VPHelperService oid4VPHelperService;
-    private final MdocTrustAnchorLoader mdocTrustAnchorLoader;
     private final Oid4vpSessionMappingRepository sessionMappingRepository;
     private final Oid4vpSessionJpaRepository oid4vpSessionJpaRepository;
     private final TransactionService transactionService;
@@ -67,8 +65,8 @@ public class OID4VPService {
 
     /**
      * Authorization Request JWT 조회 (Wallet이 request_uri로 호출)
-     * mso_mdoc 포맷이 DCQL에 포함된 경우 x509_san_dns 경로(x5c 서명)를 사용하고,
-     * 그 외에는 FileWallet의 assert 키로 DID 기반 JWT 서명을 수행한다.
+     * 이 검증자는 포맷과 무관하게 DID 기반 서명(decentralized_identifier scheme)만 사용한다.
+     * FileWallet의 assert 키로 JWT를 서명한다.
      */
     public ServiceResult<String> getAuthorizationRequest(String requestId) {
         log.debug("=== OID4VP getAuthorizationRequest for requestId: {} ===", requestId);
@@ -79,17 +77,7 @@ public class OID4VPService {
         Transaction transaction = transactionService.findTransactionByTxId(mapping.getTxId());
         validateTransaction(transaction);
 
-        // 세션의 DCQL 쿼리로 포맷 확인
-        Oid4vpSession oid4vpSession = oid4vpSessionJpaRepository.findByState(mapping.getState())
-                .orElse(null);
-        boolean useMdocScheme = oid4vpSession != null && containsMdocFormat(oid4vpSession.getDcqlQuery());
-
-        ServiceResult<String> result;
-        if (useMdocScheme) {
-            result = buildX509AuthorizationRequest(requestId);
-        } else {
-            result = buildDidAuthorizationRequest(requestId);
-        }
+        ServiceResult<String> result = buildDidAuthorizationRequest(requestId);
 
         if (!result.isSuccess()) {
             log.error("Failed to get authorization request: {} - {}", result.getErrorCode(), result.getErrorDescription());
@@ -115,26 +103,6 @@ public class OID4VPService {
 
         return authorizationService.getAuthorizationRequest(
                 requestId, compactSigner, verificationMethod, publicKeyMultibase);
-    }
-
-    /** x509_san_dns 기반 서명 (mdoc 흐름): verifier_x509 키/인증서로 x5c 헤더 포함 JWS 생성 */
-    private ServiceResult<String> buildX509AuthorizationRequest(String requestId) {
-        PrivateKey privateKey = mdocTrustAnchorLoader.getVerifierPrivateKey();
-        X509Certificate verifierCert = mdocTrustAnchorLoader.getVerifierCertificate();
-        if (privateKey == null || verifierCert == null) {
-            log.error("Verifier x509 key/cert not loaded — cannot build x509_san_dns Authorization Request");
-            throw new OpenDidException(ErrorCode.OID4VP_AUTHORIZATION_REQUEST_FAILED);
-        }
-        try {
-            String certBase64 = Base64.getEncoder().encodeToString(verifierCert.getEncoded());
-            List<String> x5cChain = List.of(certBase64);
-            log.debug("Building x509_san_dns Authorization Request with x5c chain (leaf SAN: {})",
-                    verifierCert.getSubjectX500Principal().getName());
-            return authorizationService.getAuthorizationRequest(requestId, privateKey, x5cChain);
-        } catch (Exception e) {
-            log.error("Failed to encode verifier certificate for x5c header", e);
-            throw new OpenDidException(ErrorCode.OID4VP_AUTHORIZATION_REQUEST_FAILED);
-        }
     }
 
     /**
@@ -293,37 +261,25 @@ public class OID4VPService {
             Map<String, List<Object>> vpTokenMap = oid4VPHelperService.parseVPToken(vpTokenJson);
             log.debug("vpTokenMap keys: {}", vpTokenMap.keySet());
 
-            boolean hasMdoc = containsMdocFormat(dcqlQuery);
+            // 이 검증자는 DID(kid) 기반 credential만 받는다. x5chain 기반 mdoc은 여기서 거부한다.
+            rejectX5cBasedMdoc(vpTokenMap);
+
             vpFormat = resolveSubmitFormat(dcqlQuery);
             List<String> issuerPublicKeys = resolveIssuerPublicKeys(vpTokenMap);
             List<String> holderPublicKeys = resolveHolderPublicKeys(vpTokenMap);
             holderDid = resolveHolderDid(vpTokenMap).orElse(null);
-            log.debug("Resolved issuerPublicKeys: {}, holderPublicKeys: {}, holderDid: {}, hasMdoc: {}",
-                    issuerPublicKeys.size(), holderPublicKeys.size(), holderDid, hasMdoc);
+            log.debug("Resolved issuerPublicKeys: {}, holderPublicKeys: {}, holderDid: {}",
+                    issuerPublicKeys.size(), holderPublicKeys.size(), holderDid);
 
-            ServiceResult<Map<String, Object>> result;
-            if (hasMdoc) {
-                // mdoc: x5c 기반 검증 — trustedRoots를 직접 전달
-                List<X509Certificate> trustedRoots = mdocTrustAnchorLoader.getTrustedRoots();
-                log.debug("Using trustedRoots ({} certs) for mdoc VP verification", trustedRoots.size());
-                result = oid4VPHelperService.handleVPToken(
-                        vpTokenMap,
-                        issuerPublicKeys.isEmpty() ? List.of("unresolved-issuer-key") : issuerPublicKeys,
-                        holderPublicKeys.isEmpty() ? null : holderPublicKeys,
-                        trustedRoots,
-                        state
-                );
-            } else {
-                result = authorizationService.receiveResponse(
-                        vpTokenMap,
-                        issuerPublicKeys.isEmpty() ? List.of("unresolved-issuer-key") : issuerPublicKeys,
-                        holderPublicKeys.isEmpty() ? null : holderPublicKeys,
-                        state,
-                        error,
-                        errorDescription,
-                        "POST"
-                );
-            }
+            ServiceResult<Map<String, Object>> result = authorizationService.receiveResponse(
+                    vpTokenMap,
+                    issuerPublicKeys.isEmpty() ? List.of("unresolved-issuer-key") : issuerPublicKeys,
+                    holderPublicKeys.isEmpty() ? null : holderPublicKeys,
+                    state,
+                    error,
+                    errorDescription,
+                    "POST"
+            );
 
             if (result.isSuccess()) {
                 credentialStatusChecker.checkAll(vpTokenMap);
@@ -435,7 +391,7 @@ public class OID4VPService {
                 switch (format) {
                     case JSON_VP -> keys.addAll(resolveIssuerKeysFromJsonVp(credential));
                     case SD_JWT -> resolveIssuerKeyFromSdJwt((String) credential).ifPresent(keys::add);
-                    case MDOC -> log.warn("mDoc issuer key resolution not yet implemented");
+                    case MDOC -> resolveIssuerKeyFromMdoc((String) credential).ifPresent(keys::add);
                     case UNKNOWN -> log.warn("Unknown VP token format; skipping issuer key resolution");
                 }
             }
@@ -457,7 +413,8 @@ public class OID4VPService {
                 switch (format) {
                     case JSON_VP -> resolveHolderKeyFromJsonVp(credential).ifPresent(keys::add);
                     case SD_JWT -> resolveHolderKeyFromSdJwt((String) credential).ifPresent(keys::add);
-                    case MDOC -> log.warn("mDoc holder key resolution not yet implemented");
+                    // mdoc의 holder 바인딩(DeviceAuth)은 MSO에 담긴 deviceKey로 검증하므로 해석할 키가 없다.
+                    case MDOC -> log.debug("mDoc holder key is taken from the MSO deviceKey; nothing to resolve");
                     case UNKNOWN -> log.warn("Unknown VP token format; skipping holder key resolution");
                 }
             }
@@ -507,25 +464,53 @@ public class OID4VPService {
     }
 
     /**
-     * DCQL 쿼리에 mso_mdoc 포맷의 credential이 포함되어 있는지 확인한다.
-     * trustedRoots 경로(x5c 검증) 사용 여부를 결정하는 데 사용한다.
+     * mso_mdoc credential이 x5chain 기반이면 거부한다.
+     *
+     * <p>이 검증자는 DID(kid) 기반 mdoc만 지원한다. x5c 검증은 SDK에 남아 있지만(다른 지갑 상호운용용)
+     * 서버는 신뢰앵커(IACA)를 운용하지 않으므로, x5chain만 담긴 mdoc이 들어오면 SDK 안쪽에서
+     * "Trusted root certificates required" 같은 엉뚱한 메시지로 실패하기 전에 여기서 명시적으로 끊는다.
      */
-    private boolean containsMdocFormat(String dcqlQueryJson) {
-        if (dcqlQueryJson == null) return false;
-        try {
-            JsonNode dcql = objectMapper.readTree(dcqlQueryJson);
-            JsonNode credentials = dcql.get("credentials");
-            if (credentials == null || !credentials.isArray()) return false;
-            for (JsonNode cred : credentials) {
-                JsonNode formatNode = cred.get("format");
-                if (formatNode != null && "mso_mdoc".equals(formatNode.asText())) {
-                    return true;
+    private void rejectX5cBasedMdoc(Map<String, List<Object>> vpTokenMap) {
+        if (vpTokenMap == null) return;
+        for (List<Object> credentials : vpTokenMap.values()) {
+            if (credentials == null) continue;
+            for (Object credential : credentials) {
+                if (detectFormat(credential) != VpTokenFormat.MDOC) continue;
+                if (isX5cBasedMdoc((String) credential)) {
+                    log.warn("Rejected x5chain-based mso_mdoc — this verifier accepts DID(kid)-based mdoc only");
+                    throw new OpenDidException(ErrorCode.OID4VP_MDOC_X5C_NOT_SUPPORTED);
                 }
             }
-        } catch (Exception e) {
-            log.warn("Failed to parse DCQL query for mdoc format check: {}", e.getMessage());
         }
-        return false;
+    }
+
+    /** mso_mdoc이 kid(DID) 없이 x5chain으로만 발급자를 식별하는지 판별한다. */
+    static boolean isX5cBasedMdoc(String mdocBase64) {
+        try {
+            IdentifierResult issuer = new MDocVPVerifier().extractIssuerIdentifier(mdocBase64);
+            return issuer != null && issuer.getType() == IdentifierResult.Type.MSO_MDOC_X5C;
+        } catch (Exception e) {
+            log.warn("Failed to classify mso_mdoc issuer identifier: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * mso_mdoc IssuerAuth의 kid(DID URL)로 발급자 공개키를 해석한다.
+     * SD-JWT kid 경로와 동일하게 DID Document의 publicKeyMultibase를 base64로 변환해 SDK에 넘긴다.
+     */
+    private Optional<String> resolveIssuerKeyFromMdoc(String mdocBase64) {
+        try {
+            IdentifierResult issuer = new MDocVPVerifier().extractIssuerIdentifier(mdocBase64);
+            if (issuer == null || issuer.getType() != IdentifierResult.Type.MSO_MDOC_KID) {
+                log.warn("mso_mdoc has no kid(DID); cannot resolve issuer public key");
+                return Optional.empty();
+            }
+            return resolveKeyByVerificationMethod(issuer.getValue());
+        } catch (Exception e) {
+            log.warn("Failed to resolve issuer public key from mso_mdoc: {}", e.getMessage());
+            return Optional.empty();
+        }
     }
 
     private List<String> resolveIssuerKeysFromJsonVp(Object credential) {

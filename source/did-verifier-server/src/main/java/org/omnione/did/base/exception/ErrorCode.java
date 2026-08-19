@@ -160,6 +160,8 @@ public enum ErrorCode {
             "This session requires an encrypted (direct_post.jwt) response; plaintext submission is not accepted.", 400),
     OID4VP_RESPONSE_MODE_NOT_SUPPORTED("SSRVVRF01315",
             "OID4VP responseMode is fixed to direct_post.jwt and cannot be changed to a different value.", 400),
+    OID4VP_MDOC_X5C_NOT_SUPPORTED("SSRVVRF01316",
+            "This verifier only accepts DID-based (kid) mso_mdoc; x5chain-based mdoc is not supported.", 400),
 
     // Status List Errors (1400~1499)
     STATUS_LIST_FETCH_FAILED("SSRVVRF01401", "Failed to fetch status list token.", 500),
