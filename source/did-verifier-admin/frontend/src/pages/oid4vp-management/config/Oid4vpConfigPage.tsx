@@ -285,7 +285,6 @@ const Oid4vpConfigPage = () => {
             >
               <MenuItem value="redirect_uri">redirect_uri</MenuItem>
               <MenuItem value="decentralized_identifier">decentralized_identifier</MenuItem>
-              <MenuItem value="x509_san_dns">x509_san_dns</MenuItem>
             </Select>
           </FormControl>
           <Box sx={{ display: 'flex', gap: 1 }}>
