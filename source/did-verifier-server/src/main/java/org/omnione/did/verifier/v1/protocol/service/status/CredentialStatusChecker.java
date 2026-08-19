@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.omnione.did.base.exception.ErrorCode;
 import org.omnione.did.base.exception.OpenDidException;
 import org.omnione.did.base.property.VerifierProperty;
+import org.omnione.did.oid4vc.formatter.oid4vp.verifier.impl.MDocVPVerifier;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -16,7 +17,10 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class CredentialStatusChecker {
 
+    private static final MDocVPVerifier MDOC_VERIFIER = new MDocVPVerifier();
+
     private final StatusClaimParser parser;
+    private final MdocStatusClaimParser mdocParser;
     private final StatusListTokenFetcher fetcher;
     private final StatusListTokenVerifier tokenVerifier;
     private final StatusListBitDecoder decoder;
@@ -27,17 +31,20 @@ public class CredentialStatusChecker {
         for (List<Object> credentials : vpTokenMap.values()) {
             if (credentials == null) continue;
             for (Object credential : credentials) {
-                if (!(credential instanceof String sdJwt)) continue;
-                if (!sdJwt.contains("~")) continue; // SD-JWT만 처리
-                checkSingle(sdJwt);
+                if (!(credential instanceof String value)) continue;
+                if (value.contains("~")) {
+                    check(parser.parse(value), "SD-JWT");
+                } else if (MDOC_VERIFIER.supports(value)) {
+                    // mso_mdoc: status 참조가 MSO(CBOR) 안에 있을 뿐, 조회·판정 절차는 SD-JWT와 동일하다.
+                    check(mdocParser.parse(value), "mso_mdoc");
+                }
             }
         }
     }
 
-    private void checkSingle(String sdJwt) {
-        Optional<StatusListRef> refOpt = parser.parse(sdJwt);
+    private void check(Optional<StatusListRef> refOpt, String format) {
         if (refOpt.isEmpty()) {
-            log.debug("No status claim in SD-JWT, skipping status check");
+            log.debug("No status claim in {}, skipping status check", format);
             return;
         }
         StatusListRef ref = refOpt.get();

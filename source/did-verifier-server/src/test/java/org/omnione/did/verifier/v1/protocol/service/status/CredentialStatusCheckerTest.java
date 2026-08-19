@@ -22,6 +22,7 @@ import static org.mockito.Mockito.*;
 class CredentialStatusCheckerTest {
 
     @Mock StatusClaimParser parser;
+    @Mock MdocStatusClaimParser mdocParser;
     @Mock StatusListTokenFetcher fetcher;
     @Mock StatusListTokenVerifier tokenVerifier;
     @Mock StatusListBitDecoder decoder;
@@ -38,7 +39,7 @@ class CredentialStatusCheckerTest {
     void setUp() {
         props = new VerifierProperty.StatusListProperties();
         props.setFailOnFetchError(true);
-        checker = new CredentialStatusChecker(parser, fetcher, tokenVerifier, decoder, verifierProperty);
+        checker = new CredentialStatusChecker(parser, mdocParser, fetcher, tokenVerifier, decoder, verifierProperty);
     }
 
     @Test
@@ -173,6 +174,32 @@ class CredentialStatusCheckerTest {
                 .doesNotThrowAnyException();
 
         verifyNoInteractions(parser, fetcher, tokenVerifier, decoder);
+    }
+
+    @Test
+    @DisplayName("mso_mdoc도 동일한 폐기 판정 파이프라인을 탄다")
+    void mdoc_revoked_status_throws() throws Exception {
+        String mdoc = mdocCredential();
+        when(mdocParser.parse(mdoc)).thenReturn(Optional.of(new StatusListRef(6, URI)));
+        when(fetcher.fetch(URI)).thenReturn(FAKE_TOKEN_JWT);
+        when(tokenVerifier.verify(FAKE_TOKEN_JWT, URI))
+                .thenReturn(new StatusListTokenPayload(2, "lst", 3600, 9999999999L));
+        when(decoder.extract("lst", 2, 6)).thenReturn(1);
+
+        assertThatThrownBy(() -> checker.checkAll(Map.of("cred1", List.of(mdoc))))
+                .isInstanceOf(OpenDidException.class)
+                .extracting(e -> ((OpenDidException) e).getErrorCode())
+                .isEqualTo(ErrorCode.STATUS_LIST_CREDENTIAL_INVALID);
+        verify(parser, never()).parse(any());
+    }
+
+    private static String mdocCredential() throws Exception {
+        try (java.io.InputStream in = new org.springframework.core.io.ClassPathResource(
+                "fixtures/mdoc/vp_token_kid_only.json").getInputStream()) {
+            String json = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            return new com.fasterxml.jackson.databind.ObjectMapper().readTree(json)
+                    .get("query_0").get(0).asText();
+        }
     }
 
     private static String buildFakeSdJwt() {
