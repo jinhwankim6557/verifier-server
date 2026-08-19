@@ -70,17 +70,19 @@ interface VcSchema {
   };
 }
 
-const FORMATS = ['dc+sd-jwt-did', 'vc+sd-jwt', 'opendid_vc', 'mso_mdoc'] as const;
+const FORMATS = ['dc+sd-jwt-did', 'vc+sd-jwt', 'opendid_vc', 'mso_mdoc', 'mso_mdoc-did'] as const;
+
+const isMdocFormat = (format: string) => format === 'mso_mdoc' || format === 'mso_mdoc-did';
 
 const getMetaKey = (format: string) => {
   if (format === 'opendid_vc') return 'credential_schema_id_values';
-  if (format === 'mso_mdoc') return 'doctype_value';
+  if (isMdocFormat(format)) return 'doctype_value';
   return 'vct_values';
 };
 
 const getMetaHint = (format: string) => {
   if (format === 'opendid_vc') return 'Credential Schema ID list (use Schema Search)';
-  if (format === 'mso_mdoc') return 'mDoc docType (e.g. org.iso.18013.5.1.mDL)';
+  if (isMdocFormat(format)) return 'mDoc docType (e.g. org.iso.18013.5.1.mDL)';
   return 'VCT values for dc+sd-jwt-did / vc+sd-jwt';
 };
 
@@ -114,7 +116,7 @@ const ScopeMappingRegistrationPage = () => {
   const [selectiveMode, setSelectiveMode] = useState(false);
 
   const isOpendidVc = credQuery.format === 'opendid_vc';
-  const isMdoc = credQuery.format === 'mso_mdoc';
+  const isMdoc = isMdocFormat(credQuery.format);
 
   const buildDcqlJson = () => {
     const cred: any = {};

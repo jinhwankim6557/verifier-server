@@ -70,7 +70,7 @@ interface VcSchema {
   };
 }
 
-const FORMATS = ['dc+sd-jwt-did', 'vc+sd-jwt', 'opendid_vc', 'mso_mdoc'] as const;
+const FORMATS = ['dc+sd-jwt-did', 'vc+sd-jwt', 'opendid_vc', 'mso_mdoc', 'mso_mdoc-did'] as const;
 
 /** 선택지에서 빠진 포맷으로 저장된 기존 레코드도 값을 잃지 않도록 그대로 노출한다. */
 const formatOptions = (current: string) =>
@@ -78,15 +78,17 @@ const formatOptions = (current: string) =>
     ? [current, ...FORMATS]
     : [...FORMATS];
 
+const isMdocFormat = (format: string) => format === 'mso_mdoc' || format === 'mso_mdoc-did';
+
 const getMetaKey = (format: string) => {
   if (format === 'opendid_vc') return 'credential_schema_id_values';
-  if (format === 'mso_mdoc') return 'doctype_value';
+  if (isMdocFormat(format)) return 'doctype_value';
   return 'vct_values';
 };
 
 const getMetaHint = (format: string) => {
   if (format === 'opendid_vc') return 'Credential Schema ID list (use Schema Search)';
-  if (format === 'mso_mdoc') return 'mDoc docType (e.g. org.iso.18013.5.1.mDL)';
+  if (isMdocFormat(format)) return 'mDoc docType (e.g. org.iso.18013.5.1.mDL)';
   return 'VCT values for dc+sd-jwt-did / vc+sd-jwt';
 };
 
@@ -104,14 +106,14 @@ const parseDcqlToForm = (dcqlStr: string): CredentialQueryData => {
     const metaValues = rawMeta != null
       ? (typeof rawMeta === 'string' ? rawMeta : JSON.stringify(rawMeta))
       : '';
-    const mdocClaims: MdocClaimEntry[] = format === 'mso_mdoc'
+    const mdocClaims: MdocClaimEntry[] = isMdocFormat(format)
       ? (cred.claims || []).map((c: any) => ({
           id: c.id || '',
           namespace: c.namespace || '',
           claimName: c.claim_name || '',
         }))
       : [];
-    const claims: ClaimEntry[] = format !== 'mso_mdoc'
+    const claims: ClaimEntry[] = !isMdocFormat(format)
       ? (cred.claims || []).map((c: any) => ({
           id: c.id || '',
           path: c.path ? JSON.stringify(c.path) : '',
@@ -154,7 +156,7 @@ const ScopeMappingEditPage = () => {
   const [selectiveMode, setSelectiveMode] = useState(false);
 
   const isOpendidVc = credQuery.format === 'opendid_vc';
-  const isMdoc = credQuery.format === 'mso_mdoc';
+  const isMdoc = isMdocFormat(credQuery.format);
 
   useEffect(() => {
     const fetchData = async () => {
