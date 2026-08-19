@@ -1,0 +1,18 @@
+{
+  "@context": ["https://www.w3.org/ns/did/v1"],
+  "didDocument": {
+    "@context": ["https://www.w3.org/ns/did/v1"],
+    "id": "did:omn:issuer",
+    "verificationMethod": [
+      {
+        "id": "did:omn:issuer?versionId=1#assert",
+        "type": "Secp256r1VerificationKey2018",
+        "controller": "did:omn:issuer",
+        "publicKeyMultibase": "zwvEA6UaCPwkbgZ1ZTFQGEV4kiRJS64JXfDwCfF3bYkWF"
+      }
+    ],
+    "assertionMethod": ["did:omn:issuer?versionId=1#assert"]
+  },
+  "didResolutionMetadata": { "contentType": "application/did+ld+json" },
+  "didDocumentMetadata": {}
+}
