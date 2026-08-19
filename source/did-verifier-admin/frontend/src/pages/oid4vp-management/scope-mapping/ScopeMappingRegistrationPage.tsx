@@ -70,7 +70,7 @@ interface VcSchema {
   };
 }
 
-const FORMATS = ['dc+sd-jwt', 'dc+sd-jwt-did', 'vc+sd-jwt', 'opendid_vc', 'mso_mdoc'] as const;
+const FORMATS = ['dc+sd-jwt-did', 'vc+sd-jwt', 'opendid_vc', 'mso_mdoc'] as const;
 
 const getMetaKey = (format: string) => {
   if (format === 'opendid_vc') return 'credential_schema_id_values';
@@ -81,7 +81,7 @@ const getMetaKey = (format: string) => {
 const getMetaHint = (format: string) => {
   if (format === 'opendid_vc') return 'Credential Schema ID list (use Schema Search)';
   if (format === 'mso_mdoc') return 'mDoc docType (e.g. org.iso.18013.5.1.mDL)';
-  return 'VCT values for dc+sd-jwt / dc+sd-jwt-did / vc+sd-jwt';
+  return 'VCT values for dc+sd-jwt-did / vc+sd-jwt';
 };
 
 const ScopeMappingRegistrationPage = () => {
@@ -98,7 +98,7 @@ const ScopeMappingRegistrationPage = () => {
 
   const [credQuery, setCredQuery] = useState<CredentialQueryData>({
     credentialId: '',
-    format: 'dc+sd-jwt',
+    format: 'dc+sd-jwt-did',
     metaValues: '',
     claims: [],
     mdocClaims: [],

@@ -70,7 +70,13 @@ interface VcSchema {
   };
 }
 
-const FORMATS = ['dc+sd-jwt', 'dc+sd-jwt-did', 'vc+sd-jwt', 'opendid_vc', 'mso_mdoc'] as const;
+const FORMATS = ['dc+sd-jwt-did', 'vc+sd-jwt', 'opendid_vc', 'mso_mdoc'] as const;
+
+/** 선택지에서 빠진 포맷으로 저장된 기존 레코드도 값을 잃지 않도록 그대로 노출한다. */
+const formatOptions = (current: string) =>
+  current && !FORMATS.includes(current as typeof FORMATS[number])
+    ? [current, ...FORMATS]
+    : [...FORMATS];
 
 const getMetaKey = (format: string) => {
   if (format === 'opendid_vc') return 'credential_schema_id_values';
@@ -81,12 +87,12 @@ const getMetaKey = (format: string) => {
 const getMetaHint = (format: string) => {
   if (format === 'opendid_vc') return 'Credential Schema ID list (use Schema Search)';
   if (format === 'mso_mdoc') return 'mDoc docType (e.g. org.iso.18013.5.1.mDL)';
-  return 'VCT values for dc+sd-jwt / dc+sd-jwt-did / vc+sd-jwt';
+  return 'VCT values for dc+sd-jwt-did / vc+sd-jwt';
 };
 
 const parseDcqlToForm = (dcqlStr: string): CredentialQueryData => {
   const defaultVal: CredentialQueryData = {
-    credentialId: '', format: 'dc+sd-jwt', metaValues: '', claims: [], mdocClaims: [],
+    credentialId: '', format: 'dc+sd-jwt-did', metaValues: '', claims: [], mdocClaims: [],
   };
   try {
     const dcql = typeof dcqlStr === 'string' ? JSON.parse(dcqlStr) : dcqlStr;
@@ -134,7 +140,7 @@ const ScopeMappingEditPage = () => {
   const [originalFormData, setOriginalFormData] = useState<ScopeMappingFormData | null>(null);
 
   const [credQuery, setCredQuery] = useState<CredentialQueryData>({
-    credentialId: '', format: 'dc+sd-jwt', metaValues: '', claims: [], mdocClaims: [],
+    credentialId: '', format: 'dc+sd-jwt-did', metaValues: '', claims: [], mdocClaims: [],
   });
   const [originalCredQuery, setOriginalCredQuery] = useState<CredentialQueryData | null>(null);
 
@@ -546,7 +552,7 @@ const ScopeMappingEditPage = () => {
           <FormControl fullWidth size="small">
             <InputLabel>Format</InputLabel>
             <Select value={credQuery.format} label="Format" onChange={handleFormatChange}>
-              {FORMATS.map(f => <MenuItem key={f} value={f}>{f}</MenuItem>)}
+              {formatOptions(credQuery.format).map(f => <MenuItem key={f} value={f}>{f}</MenuItem>)}
             </Select>
           </FormControl>
         </Box>
