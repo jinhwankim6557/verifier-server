@@ -19,7 +19,7 @@ interface OID4VPConfigData {
   endpoints: { response: string; request: string };
   clientMetadata: { vpFormatsSupported: Record<string, object> };
   crypto: { vpTokenEncryptionKey: string | null };
-  verification?: { skipX5cChainValidation?: boolean; enforceClaimConstraints?: boolean };
+  verification?: { enforceClaimConstraints?: boolean };
   encryption?: { alg: string; enc: string };
   responseMode?: string;
 }
@@ -40,9 +40,16 @@ const DEFAULT_CONFIG: OID4VPConfigData = {
     },
   },
   crypto: { vpTokenEncryptionKey: null },
-  verification: { skipX5cChainValidation: false, enforceClaimConstraints: false },
+  verification: { enforceClaimConstraints: false },
   encryption: { alg: 'ECDH-ES', enc: 'A256GCM' },
   responseMode: 'direct_post.jwt',
+};
+
+/** Shows the leading quarter of a secret and masks the rest. */
+const maskSecret = (value?: string | null) => {
+  if (!value) return '(Not configured)';
+  const visible = Math.max(4, Math.floor(value.length / 4));
+  return value.slice(0, visible) + '•'.repeat(Math.max(0, value.length - visible));
 };
 
 const Oid4vpConfigPage = () => {
@@ -77,7 +84,7 @@ const Oid4vpConfigPage = () => {
               'mso_mdoc': { alg_values: ['ES256'] },
             },
           },
-          verification: data.verification || { skipX5cChainValidation: false, enforceClaimConstraints: false },
+          verification: { enforceClaimConstraints: data.verification?.enforceClaimConstraints ?? false },
           crypto: data.crypto || { vpTokenEncryptionKey: null },
           encryption: data.encryption || { alg: 'ECDH-ES', enc: 'A256GCM' },
           responseMode: data.responseMode || 'direct_post.jwt',
@@ -340,19 +347,18 @@ const Oid4vpConfigPage = () => {
           sx={{ bgcolor: '#fafafa' }}
         />
         <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, mb: 1.5, display: 'block' }}>
-          모든 OID4VP 트랜잭션은 암호화 응답(direct_post.jwt)을 요구합니다. 협상 불가 고정값이며,
-          평문(direct_post) 응답 제출은 서버가 거부합니다.
+          Fixed value. All transactions require an encrypted response; plaintext submissions are rejected.
         </Typography>
         <TextField
           fullWidth
           label="VP Token Encryption Key"
-          value={config.crypto?.vpTokenEncryptionKey || '(Not configured)'}
+          value={maskSecret(config.crypto?.vpTokenEncryptionKey)}
           variant="outlined" size="small"
           InputProps={{ readOnly: true }}
           sx={{ bgcolor: '#fafafa' }}
         />
         <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-          VP Token 암호화에 사용되는 대칭키입니다. DB seed 또는 직접 설정으로 관리됩니다.
+          Symmetric key for VP Token encryption. Partially masked; managed via server configuration.
         </Typography>
         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mt: 1 }}>
           <TextField
@@ -373,33 +379,11 @@ const Oid4vpConfigPage = () => {
           />
         </Box>
         <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-          OID4VP 응답(direct_post.jwt) JWE 암호화 알고리즘입니다. 전체 트랜잭션에 일괄 적용되며(정책별 on/off 없음),
-          현재는 읽기전용입니다 — 값을 바꾸려면 Wallet과 사전 합의가 필요합니다.
+          JWE algorithms for encrypted responses. Read-only; changing them requires prior agreement with wallets.
         </Typography>
 
-        <SectionLabel>Verification (mdoc)</SectionLabel>
+        <SectionLabel>Verification</SectionLabel>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, pl: 1 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={config.verification?.skipX5cChainValidation ?? false}
-                onChange={(e) =>
-                  setConfig(prev => ({
-                    ...prev,
-                    verification: { ...prev.verification, skipX5cChainValidation: e.target.checked },
-                  }))
-                }
-              />
-            }
-            label={
-              <Box>
-                <Typography variant="body2">Skip X.509 Chain Validation</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  PoC/Dev 환경용. 운영 시 반드시 false로 설정하십시오.
-                </Typography>
-              </Box>
-            }
-          />
           <FormControlLabel
             control={
               <Switch
@@ -416,7 +400,7 @@ const Oid4vpConfigPage = () => {
               <Box>
                 <Typography variant="body2">Enforce Claim Constraints</Typography>
                 <Typography variant="caption" color="text.secondary">
-                  DCQL claim constraint 강제 검증 여부.
+                  Enforce DCQL claim constraints during VP verification.
                 </Typography>
               </Box>
             }
