@@ -87,6 +87,9 @@ import java.util.Set;
 @Transactional
 public class VpVerificationApplicationService {
 
+    /** OpenDID 네이티브(DID_VP) 프로토콜로 제출되는 VP의 credential 포맷. VP History 표시에 사용한다. */
+    private static final String FORMAT_OPENDID_VC = "opendid_vc";
+
     private final VerifierService verifierService;
     private final TransactionService transactionService;
     private final VpProfileRepository vpProfileRepository;
@@ -145,6 +148,7 @@ public class VpVerificationApplicationService {
                     .transactionId(transaction.getId())
                     .vp(vpJson)
                     .holderDid(vp.getHolder())
+                    .format(FORMAT_OPENDID_VC)
                     .build());
 
             transactionService.updateTransactionStatus(transaction.getId(), TransactionStatus.COMPLETED);
@@ -164,11 +168,11 @@ public class VpVerificationApplicationService {
 
         } catch (OpenDidException e) {
             log.error("OpenDidException during requestVerify: {}", e.getErrorCode().getMessage());
-            handleTxFailure(requestVerifyReqDto.getTxId(), e.getErrorCode().getCode());
+            handleTxFailure(requestVerifyReqDto.getTxId(), e.getErrorCode().getCode(), FORMAT_OPENDID_VC);
             throw e;
         } catch (Exception e) {
             log.error("Exception during requestVerify: {}", e.getMessage(), e);
-            handleTxFailure(requestVerifyReqDto.getTxId(), ErrorCode.FAILED_TO_REQUEST_VERIFY.getCode());
+            handleTxFailure(requestVerifyReqDto.getTxId(), ErrorCode.FAILED_TO_REQUEST_VERIFY.getCode(), FORMAT_OPENDID_VC);
             throw new OpenDidException(ErrorCode.FAILED_TO_REQUEST_VERIFY);
         }
     }
@@ -248,11 +252,11 @@ public class VpVerificationApplicationService {
 
         } catch (OpenDidException e) {
             log.error("OpenDidException during requestVerifyProof: {}", e.getErrorCode().getMessage());
-            handleTxFailure(requestVerifyProofReqDto.getTxId(), e.getErrorCode().getCode());
+            handleTxFailure(requestVerifyProofReqDto.getTxId(), e.getErrorCode().getCode(), null);
             throw e;
         } catch (Exception e) {
             log.error("Exception during requestVerifyProof: {}", e.getMessage(), e);
-            handleTxFailure(requestVerifyProofReqDto.getTxId(), ErrorCode.FAILED_TO_VERIFY_PROOF.getCode());
+            handleTxFailure(requestVerifyProofReqDto.getTxId(), ErrorCode.FAILED_TO_VERIFY_PROOF.getCode(), null);
             throw new OpenDidException(ErrorCode.FAILED_TO_VERIFY_PROOF);
         }
     }
@@ -336,7 +340,7 @@ public class VpVerificationApplicationService {
         }
     }
 
-    void handleTxFailure(String txId, String errorCode) {
+    void handleTxFailure(String txId, String errorCode, String format) {
         Long transactionId = null;
         try {
             Transaction transaction = transactionService.findTransactionByTxId(txId);
@@ -348,7 +352,7 @@ public class VpVerificationApplicationService {
         }
 
         if (transactionId != null) {
-            vpSubmitAuditService.recordFailure(transactionId, null, null, errorCode, null);
+            vpSubmitAuditService.recordFailure(transactionId, null, null, errorCode, format);
         }
 
         try {
