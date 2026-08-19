@@ -20,7 +20,7 @@ export const getNavigationByStatus = (serverStatus: string | null): Navigation=>
     },
     { 
       segment: 'vp-policy-management', 
-      title: 'VP Policy Management', 
+      title: 'OpenDID Policy Management', 
       children: [    
         { segment: 'filter-management', title: 'Filter Management' },
         { segment: 'process-management', title: 'Process Management' },
