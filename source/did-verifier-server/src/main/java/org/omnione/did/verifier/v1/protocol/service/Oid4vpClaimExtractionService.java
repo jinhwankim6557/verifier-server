@@ -28,6 +28,11 @@ public class Oid4vpClaimExtractionService {
     // {code, caption, type, format, hideValue, value} 통짜 객체로 들어있다(다른 포맷의 평범한 값과 다름).
     private static final String OPENDID_VC_FORMAT = "opendid_vc";
 
+    // mdoc은 claim이 namespace 한 겹 아래에 모여 있다: {namespace: {elementIdentifier: value}}.
+    // 그대로 두면 화면에 namespace 한 줄 + 객체 통짜가 찍히므로 element 단위로 펴서 보여준다.
+    private static final String MDOC_FORMAT = "mso_mdoc";
+    private static final String MDOC_DID_FORMAT = "mso_mdoc-did";
+
     private final OID4VPHelperService oid4VPHelperService;
     private final ObjectMapper objectMapper;
 
@@ -61,7 +66,7 @@ public class Oid4vpClaimExtractionService {
                         ParsedCredential parsed = adapter.parse(raw);
                         List<ClaimView> result = new ArrayList<>();
                         parsed.getAllClaims().forEach((key, value) ->
-                                result.add(toClaimView(parsed.getFormat(), key, value)));
+                                addClaimViews(result, parsed.getFormat(), key, value));
                         return result;
                     } catch (DCQLException e) {
                         log.warn("Failed to parse credential for claim display: {}", e.getMessage());
@@ -72,6 +77,20 @@ public class Oid4vpClaimExtractionService {
                     log.debug("No credential adapter detected for claim display");
                     return List.of();
                 });
+    }
+
+    /** mdoc은 namespace 맵을 풀어 element마다 한 줄씩, 그 외 포맷은 그대로 한 줄을 만든다. */
+    private void addClaimViews(List<ClaimView> result, String format, String key, Object value) {
+        if (isMdocFormat(format) && value instanceof Map<?, ?> nameSpace) {
+            nameSpace.forEach((element, elementValue) ->
+                    result.add(new ClaimView(String.valueOf(element), stringifyClaimValue(elementValue))));
+            return;
+        }
+        result.add(toClaimView(format, key, value));
+    }
+
+    private boolean isMdocFormat(String format) {
+        return MDOC_FORMAT.equals(format) || MDOC_DID_FORMAT.equals(format);
     }
 
     // opendid_vc는 value가 {caption, value, ...} 디스크립터 객체이므로 caption/value를 풀어서 꺼낸다.

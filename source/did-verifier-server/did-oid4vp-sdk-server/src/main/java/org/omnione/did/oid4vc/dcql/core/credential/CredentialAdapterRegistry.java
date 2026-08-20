@@ -21,6 +21,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import org.omnione.did.mdoc.core.oid4vp.MDocParser;
 import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.omnione.did.oid4vc.dcql.core.credential.impl.MDocCredentialAdapter;
@@ -97,6 +98,17 @@ public class CredentialAdapterRegistry {
         // OpenDID VC detection: JSON-LD with @context and VerifiablePresentation type
         if (rawCredential.contains("@context") && rawCredential.contains("VerifiablePresentation")) {
             return findAdapter("opendid_vc");
+        }
+
+        // mdoc detection: base64url/base64-encoded CBOR DeviceResponse.
+        // The adapter resolves mso_mdoc vs mso_mdoc-did from the credential itself.
+        try {
+            byte[] decoded = MDocParser.decodeBase64(rawCredential.trim());
+            if (decoded != null && MDocParser.isDeviceResponse(decoded)) {
+                return findAdapter("mso_mdoc");
+            }
+        } catch (Exception e) {
+            // not an mdoc; fall through
         }
 
         // Add more detection logic for other formats as needed

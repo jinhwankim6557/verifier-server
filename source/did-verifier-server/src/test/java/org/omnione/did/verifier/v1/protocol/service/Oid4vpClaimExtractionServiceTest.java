@@ -69,4 +69,24 @@ class Oid4vpClaimExtractionServiceTest {
     void returnsEmptyListForBlankCredential() {
         assertThat(service.extractFromCredential("")).isEmpty();
     }
+
+    // 실제 지갑이 제출한 mso_mdoc-did(2026-08-20 캡처). mdoc은 claim이 namespace 아래 모여 있어
+    // 펴주지 않으면 confirm 화면에 namespace 한 줄 + 객체 통짜가 찍힌다.
+    @Test
+    void extractsMdocClaimsFlattenedByNamespace() throws Exception {
+        String credential;
+        try (java.io.InputStream in = new org.springframework.core.io.ClassPathResource(
+                "fixtures/mdoc/vp_token_encrypted_session.json").getInputStream()) {
+            credential = new ObjectMapper().readTree(new String(in.readAllBytes(),
+                    java.nio.charset.StandardCharsets.UTF_8))
+                    .get("vpToken").get("pid_mdoc").get(0).asText();
+        }
+
+        List<ClaimView> claims = service.extractFromCredential(credential);
+
+        assertThat(claims).extracting(ClaimView::getCaption)
+                .containsExactlyInAnyOrder("given_name", "family_name", "birth_date");
+        assertThat(claims).extracting(ClaimView::getValue)
+                .containsExactlyInAnyOrder("Initiate", "User", "2026-08-20");
+    }
 }
