@@ -33,10 +33,10 @@ const DEFAULT_CONFIG: OID4VPConfigData = {
   endpoints: { response: '/oid4vp/response', request: '/oid4vp/request' },
   clientMetadata: {
     vpFormatsSupported: {
-      'dc+sd-jwt': {},
+      'mso_mdoc-did': { alg_values: ['ES256'] },
       'dc+sd-jwt-did': {},
+      'vc+sd-jwt': {},
       'opendid_vc': {},
-      'mso_mdoc': { alg_values: ['ES256'] },
     },
   },
   crypto: { vpTokenEncryptionKey: null },
@@ -79,9 +79,10 @@ const Oid4vpConfigPage = () => {
           endpoints: data.endpoints || { response: '/oid4vp/response', request: '/oid4vp/request' },
           clientMetadata: data.clientMetadata || {
             vpFormatsSupported: {
-              'dc+sd-jwt': {},
+              'mso_mdoc-did': { alg_values: ['ES256'] },
+              'dc+sd-jwt-did': {},
+              'vc+sd-jwt': {},
               'opendid_vc': {},
-              'mso_mdoc': { alg_values: ['ES256'] },
             },
           },
           verification: { enforceClaimConstraints: data.verification?.enforceClaimConstraints ?? false },

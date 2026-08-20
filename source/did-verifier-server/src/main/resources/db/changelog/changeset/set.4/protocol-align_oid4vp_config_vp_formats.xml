@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!-- 광고하는 포맷을 서버가 실제로 받는 포맷과 일치시킨다.
+         이 검증자는 DID 기반 credential만 받으므로:
+           - mso_mdoc(x5chain 기반)은 제거한다. 광고해 두면 지갑이 보내지만 서버는
+             OID4VP_MDOC_X5C_NOT_SUPPORTED(SSRVVRF01316)로 거부해 서로 어긋난다.
+           - mso_mdoc-did를 추가한다. DCQL에서 쓰는 식별자이자 실제로 받는 유일한 mdoc 포맷이다.
+           - SD-JWT는 kid(DID) 기반인 dc+sd-jwt-did / vc+sd-jwt만 남긴다.
+         vpFormatsSupported 키만 통째로 교체하고 baseUrl/clientId/crypto 등 나머지 config는
+         그대로 보존한다(oid4vp-config-add-sdjwt-did-format changeset과 동일한 이유). -->
+    <changeSet id="oid4vp-config-align-vp-formats" author="unified-verifier">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="1">SELECT COUNT(*) FROM oid4vp_config WHERE type = 'OID4VP' AND config NOT LIKE '%mso_mdoc-did%'</sqlCheck>
+        </preConditions>
+        <sql>
+            UPDATE oid4vp_config
+            SET config = jsonb_set(
+                config::jsonb,
+                '{clientMetadata,vpFormatsSupported}',
+                '{"mso_mdoc-did":{"alg_values":["ES256"]},"dc+sd-jwt-did":{},"vc+sd-jwt":{},"opendid_vc":{}}'::jsonb,
+                true
+            )::text
+            WHERE type = 'OID4VP';
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>
