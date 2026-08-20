@@ -29,8 +29,10 @@ import org.omnione.did.oid4vc.formatter.oid4vp.verifier.dto.IdentifierResult;
 import org.omnione.did.oid4vc.formatter.oid4vp.verifier.dto.VerificationConfig;
 import org.omnione.did.oid4vc.formatter.exception.FormatterException;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.util.Base64;
@@ -462,6 +464,47 @@ public class OID4VPHelperService {
   /**
    * Checks if session has expired and updates status if expired.
    */
+  /**
+   * Returns the SHA-256 JWK Thumbprint (RFC 7638) of the response encryption key that was
+   * advertised to the wallet in {@code client_metadata.jwks}.
+   *
+   * <p>OpenID4VPHandoverInfo carries this value as its third element when the Authorization
+   * Response is encrypted, and null when it is sent in plaintext. The wallet binds DeviceAuth to
+   * it, so an mdoc presented over {@code direct_post.jwt} only verifies when the same thumbprint
+   * is reproduced here.
+   *
+   * @return the thumbprint, or {@code null} for plaintext responses or when no key is advertised
+   */
+  private byte[] responseEncryptionKeyThumbprint(VerificationSession session) {
+    if (session == null || !RESPONSE_MODE_DIRECT_POST_JWT.equals(session.getResponseMode())
+        || session.getClientMetadata() == null) {
+      return null;
+    }
+    try {
+      JsonNode keys = objectMapper.readTree(session.getClientMetadata()).path("jwks").path("keys");
+      for (JsonNode key : keys) {
+        if (!"EC".equals(key.path("kty").asText())) {
+          continue;
+        }
+        String crv = key.path("crv").asText(null);
+        String x = key.path("x").asText(null);
+        String y = key.path("y").asText(null);
+        if (crv == null || x == null || y == null) {
+          continue;
+        }
+        // RFC 7638: only the required members, lexicographically ordered, no whitespace.
+        String canonical = "{\"crv\":\"" + crv + "\",\"kty\":\"EC\",\"x\":\"" + x
+            + "\",\"y\":\"" + y + "\"}";
+        return MessageDigest.getInstance("SHA-256")
+            .digest(canonical.getBytes(StandardCharsets.UTF_8));
+      }
+      log.warn("No EC key found in client_metadata.jwks; mdoc DeviceAuth will use a null thumbprint");
+    } catch (Exception e) {
+      log.warn("Failed to compute response encryption key thumbprint: {}", e.getMessage());
+    }
+    return null;
+  }
+
   public boolean isSessionExpired(VerificationSession session) {
     OID4VPConfig config = configService.getOID4VPConfig();
     boolean expired = System.currentTimeMillis() - session.getCreatedAt() >
@@ -671,7 +714,8 @@ public class OID4VPHelperService {
             boolean bindingValid;
             if (verifier instanceof MDocVPVerifier mdocVerifier) {
               bindingValid = mdocVerifier.validatePresentationBinding(
-                  credential, config.buildClientId(), session.getNonce(), config.getResponseUrl());
+                  credential, config.buildClientId(), session.getNonce(), config.getResponseUrl(),
+                  responseEncryptionKeyThumbprint(session));
             } else {
               bindingValid = verifier.validatePresentationBinding(
                   credential, config.buildClientId(), session.getNonce());

@@ -1,0 +1,20 @@
+{
+  "_comment": "Real wallet submission captured 2026-08-20 (direct_post.jwt). DeviceAuth is bound to these exact values.",
+  "clientId": "decentralized_identifier:did:omn:verifier",
+  "nonce": "2464cf04-940f-4a67-af06-89ed7bf2160a",
+  "responseUri": "http://192.168.3.110:8092/oid4vp/response",
+  "responseEncryptionJwk": {
+    "kty": "EC",
+    "crv": "P-256",
+    "use": "enc",
+    "alg": "ECDH-ES",
+    "kid": "9360ab2b-789f-4b27-90a4-1d9657f7e41b",
+    "x": "lMFna8s-U5GH0MOGBx8vPrfAKmez-wQDOPF58Nl92LQ",
+    "y": "L3ZiGh9MyWvNkBlkmG-tpgXbw44Rh043WfvFSFudqaU"
+  },
+  "vpToken": {
+    "pid_mdoc": [
+      "o2d2ZXJzaW9uYzEuMGlkb2N1bWVudHOBo2dkb2NUeXBld2V1LmV1cm9wYS5lYy5ldWRpLnBpZC4xbGlzc3VlclNpZ25lZKJqbmFtZVNwYWNlc6F3ZXUuZXVyb3BhLmVjLmV1ZGkucGlkLjGD2BhYVqRmcmFuZG9tUOp-ZI058drOZK46tjsgc8loZGlnZXN0SUQAbGVsZW1lbnRWYWx1ZWhJbml0aWF0ZXFlbGVtZW50SWRlbnRpZmllcmpnaXZlbl9uYW1l2BhYU6RmcmFuZG9tUKADIW3ttSFdZhDkr2FZfsloZGlnZXN0SUQBbGVsZW1lbnRWYWx1ZWRVc2VycWVsZW1lbnRJZGVudGlmaWVya2ZhbWlseV9uYW1l2BhYW6RmcmFuZG9tUDl0UZ9ZjKcbp8qYxUj9LB5oZGlnZXN0SUQCbGVsZW1lbnRWYWx1ZdkD7GoyMDI2LTA4LTIwcWVsZW1lbnRJZGVudGlmaWVyamJpcnRoX2RhdGVqaXNzdWVyQXV0aIRDoQEmoQRYIWRpZDpvbW46aXNzdWVyP3ZlcnNpb25JZD0xI2Fzc2VydFkB89gYWQHup2ZzdGF0dXOha3N0YXR1c19saXN0omNpZHgYK2N1cml4KGh0dHA6Ly8xOTIuMTY4LjMuMTEwOjgwOTEvc3RhdHVzLWxpc3RzLzJnZG9jVHlwZXdldS5ldXJvcGEuZWMuZXVkaS5waWQuMWd2ZXJzaW9uYzEuMGx2YWxpZGl0eUluZm-jZnNpZ25lZMB0MjAyNi0wOC0yMFQwNjowNzo1MlppdmFsaWRGcm9twHQyMDI2LTA4LTIwVDA2OjA3OjUyWmp2YWxpZFVudGlswHQyMDI3LTA4LTIwVDA2OjA3OjUyWmx2YWx1ZURpZ2VzdHOhd2V1LmV1cm9wYS5lYy5ldWRpLnBpZC4xowBYIMC76CvxNZkyG9ZVITimzbVI-EGwuifVcAQlrFJltMmDAVggFpltDCOdStZ_CMt3HVBIrREVQWtTCCdHSBaH3efCFcgCWCAi3AtNuTRwdrEnUbfs0V0o4a_FtmUiW8gt6VYr02nKLG1kZXZpY2VLZXlJbmZvoWlkZXZpY2VLZXmkAQIgASFYIFMznyXgDGUCECuEYGXWlk1iyqtN5N8DK1EmBJhx0CAdIlggoaMoXeaFEwOF45v7m_8LGllHTVNRRTdiO0f4UpuQglVvZGlnZXN0QWxnb3JpdGhtZ1NIQS0yNTZYQAIZv5bf5LWAkbFbzcCdXzq02HJloFX0orrb9MuikMNuR2X4E_LMsJwqqE_iFh9-qTTxe7Ss7Q779UAuXGVAK_FsZGV2aWNlU2lnbmVkompuYW1lU3BhY2Vz2BhBoGpkZXZpY2VBdXRooW9kZXZpY2VTaWduYXR1cmWEQ6EBJqD2WEBJMHsrpLg1jfV8_2f6U74CxsMi1bcLSdOif2roxImP3wp2pTGY6wpKene9XHtRX4frcB7RopMXInz31kZ5FTzLZnN0YXR1cwA"
+    ]
+  }
+}
